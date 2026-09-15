@@ -6,7 +6,7 @@ import requests
 from prefect import get_run_logger, task
 from requests import Response
 
-from .database import Connection, Tuple, save_tokens_to_database, validate_db_auth_state
+from .database import Connection, save_tokens_to_database, validate_db_auth_state
 from .models import (
     TL_Auth,
     TL_RequestInfo,
@@ -67,7 +67,7 @@ def request_teamleader_info(
     req: TL_RequestInfo,
     auth: TL_Auth,
     conn: Connection,
-) -> Tuple[TL_ResponseInfo, TL_Auth]:
+) -> tuple[TL_ResponseInfo, TL_Auth]:
     response, auth = request_teamleader(req, auth, conn)
     if not isinstance(response.data, dict):
         raise TypeError(
@@ -89,10 +89,10 @@ def request_teamleader_list(
     req: TL_RequestList,
     auth: TL_Auth,
     conn: Connection,
-) -> Tuple[TL_ResponseList, TL_Auth]:
+) -> tuple[TL_ResponseList, TL_Auth]:
     response, auth = request_teamleader(req, auth, conn)
     if not isinstance(response.data, list):
-        raise ValueError(
+        raise TypeError(
             f"Expected a list for TL_ResponseList, but got {type(response.data)}"
         )
     return (
@@ -116,7 +116,7 @@ def request_teamleader(
     req: TL_RequestList | TL_RequestInfo,
     auth: TL_Auth,
     conn: Connection,
-) -> Tuple[TL_Response, TL_Auth]:
+) -> tuple[TL_Response, TL_Auth]:
     logger = get_run_logger()
     logger.info(f"POST request - {req}")
 
