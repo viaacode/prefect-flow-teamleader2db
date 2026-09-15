@@ -1,32 +1,27 @@
-from prefect import task, get_run_logger
-from prefect_sqlalchemy import DatabaseCredentials
-from pydantic import SecretStr
-
-from models import DB_Tables, Resource, TL_Client, TL_Auth
-
-
 from datetime import datetime
-from typing import Tuple, cast
 
 # Used for type hinting
 import psycopg2.extensions
+from prefect import get_run_logger, task
+from prefect_sqlalchemy import DatabaseCredentials
+from pydantic import SecretStr
+
+from .models import Harvest_Tables, Resource, TL_Auth, TL_Client
 
 Connection = psycopg2.extensions.connection
 
 
 def truncate_table(conn: Connection, table: str):
-    with conn:
-        with conn.cursor() as curs:
-            curs.execute(f"TRUNCATE TABLE {table}")
+    with conn, conn.cursor() as curs:
+        curs.execute(f"TRUNCATE TABLE {table}")
 
 
 @task
 def create_teamleader_auth_table(conn: Connection):
-    with conn:
-        with conn.cursor() as curs:
-            curs.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {DB_Tables.tl_oauth} (
+    with conn, conn.cursor() as curs:
+        curs.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {Harvest_Tables.tl_oauth} (
                     id serial PRIMARY KEY,
                     code VARCHAR,
                     auth_token VARCHAR,
@@ -35,16 +30,15 @@ def create_teamleader_auth_table(conn: Connection):
                     updated_at timestamp with time zone NOT NULL DEFAULT now()
                 );
                 """
-            )
+        )
 
 
 @task
 def create_teamleader_resource_table(resource: Resource, conn: Connection):
     table_name = Resource.get_db_table_name(resource)
-    with conn:
-        with conn.cursor() as curs:
-            curs.execute(
-                f"""
+    with conn, conn.cursor() as curs:
+        curs.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     id serial PRIMARY KEY,
                     tl_uuid uuid NOT NULL,
@@ -55,14 +49,13 @@ def create_teamleader_resource_table(resource: Resource, conn: Connection):
                     CONSTRAINT {table_name}_constraint_key UNIQUE (tl_uuid)
                 );
                 """
-            )
+        )
 
 
-def upsert_into_table(conn: Connection, table: str, data: list[Tuple]):
-    with conn:
-        with conn.cursor() as curs:
-            curs.executemany(
-                f"""INSERT INTO {table} (
+def upsert_into_table(conn: Connection, table: str, data: list[tuple]):
+    with conn, conn.cursor() as curs:
+        curs.executemany(
+            f"""INSERT INTO {table} (
                             tl_uuid,
                             tl_type,
                             tl_content
@@ -73,16 +66,14 @@ def upsert_into_table(conn: Connection, table: str, data: list[Tuple]):
                             tl_type = EXCLUDED.tl_type,
                             updated_at = now();
                         """,
-                data,
-            )
+            data,
+        )
 
 
 @task
 def connect_database(db_block_name: str) -> Connection:
     get_run_logger().info("Creating database connection")
-    postgres_credentials = cast(
-        DatabaseCredentials, DatabaseCredentials.load(db_block_name)
-    )
+    postgres_credentials: DatabaseCredentials = DatabaseCredentials.load(db_block_name)
     password = (
         postgres_credentials.password.get_secret_value()
         if postgres_credentials.password is not None
@@ -102,13 +93,12 @@ def get_auth_tokens_from_db(
     conn: Connection, tl_auth_uri: str, tl_client: TL_Client
 ) -> TL_Auth:
     get_run_logger().info("Fetching Teamleader tokens from database")
-    with conn:
-        with conn.cursor() as curs:
-            curs.execute(f"SELECT * FROM {DB_Tables.tl_oauth} LIMIT 1;")
-            result = curs.fetchone()
+    with conn, conn.cursor() as curs:
+        curs.execute(f"SELECT * FROM {Harvest_Tables.tl_oauth} LIMIT 1;")
+        result = curs.fetchone()
     if result is None:
-        raise Exception(
-            f"Missing authorization data in database table {DB_Tables.tl_oauth}"
+        raise KeyError(
+            f"Missing authorization data in database table {Harvest_Tables.tl_oauth}"
         )
     return TL_Auth(
         uri=tl_auth_uri,
@@ -120,40 +110,38 @@ def get_auth_tokens_from_db(
 
 
 def get_last_modified_date(conn: Connection, table: str) -> datetime:
-    with conn:
-        with conn.cursor() as curs:
-            curs.execute(f"SELECT max(updated_at) FROM {table}")
-            result_list = curs.fetchone()
-            if result_list is None:
-                raise Exception("Could not fetch last updated date")
-            return result_list[0]
+    with conn, conn.cursor() as curs:
+        curs.execute(f"SELECT max(updated_at) FROM {table}")
+        result_list = curs.fetchone()
+        if result_list is None:
+            raise ValueError("Could not fetch last updated date")
+        return result_list[0]
 
 
 def save_tokens_to_database(auth: TL_Auth, conn: Connection):
-    with conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                f"""
-                UPDATE {DB_Tables.tl_oauth} SET
+    with conn, conn.cursor() as cursor:
+        cursor.execute(
+            f"""
+                UPDATE {Harvest_Tables.tl_oauth} SET
                     auth_token = %s,
                     refresh_token = %s,
                     updated_at = now();
                 """,
-                (
-                    auth.access_token.get_secret_value(),
-                    auth.refresh_token.get_secret_value(),
-                ),
-            )
+            (
+                auth.access_token.get_secret_value(),
+                auth.refresh_token.get_secret_value(),
+            ),
+        )
 
 
 def validate_db_auth_state(conn: Connection):
     with conn.cursor() as cursor:
-        cursor.execute(f"SELECT COUNT(*) FROM {DB_Tables.tl_oauth}")
+        cursor.execute(f"SELECT COUNT(*) FROM {Harvest_Tables.tl_oauth}")
         count_fetch = cursor.fetchone()
 
     if count_fetch is None:
-        raise Exception("Error on fetch of tl_oauth")
+        raise RuntimeError("Error on fetch of tl_oauth")
 
     count = count_fetch[0]
     if count != 1:
-        raise Exception("There should be exactly 1 row in tl_oauth")
+        raise ValueError("There should be exactly 1 row in tl_oauth")

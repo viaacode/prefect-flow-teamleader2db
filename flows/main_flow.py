@@ -1,11 +1,31 @@
 import json
 from functools import partial
 
-from prefect import flow, get_run_logger, Flow
+from prefect import flow, get_run_logger
 
-from models import *
-from database import *
-from teamleader import *
+from .database import (
+    Connection,
+    connect_database,
+    create_teamleader_auth_table,
+    create_teamleader_resource_table,
+    get_auth_tokens_from_db,
+    get_last_modified_date,
+    truncate_table,
+    upsert_into_table,
+)
+from .models import (
+    Resource,
+    TL_Auth,
+    TL_Client,
+    TL_RequestInfo,
+    TL_RequestList,
+    TL_ResponseInfo,
+)
+from .teamleader import (
+    TeamleaderRequestException,
+    request_teamleader_info,
+    request_teamleader_list,
+)
 
 
 def prepare_info_list(infos: list[TL_ResponseInfo]) -> list[tuple]:
@@ -17,7 +37,7 @@ def prepare_info_list(infos: list[TL_ResponseInfo]) -> list[tuple]:
     ]
 
 
-@flow(name="teamleader2db resource sync")
+# @flow(name="teamleader2db resource sync")
 def sync_teamleader_resource(
     tl_uri: str,
     resource: Resource,
@@ -93,7 +113,7 @@ def main_flow(
     db_block_name: str = "etl-harvest",
     tl_api_uri: str = "https://api.focus.teamleader.eu",
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
-    resources: Optional[list[Resource]] = None,
+    resources: list[Resource] | None = None,
     full_sync: bool = False,
 ):
     """
@@ -110,10 +130,10 @@ def main_flow(
     # If a subflow fails, its exception is caught so that subsequent subflows may still execute.
     for resource in resources:
         try:
-            sync_resource_flow = cast(Flow, sync_teamleader_resource).with_options(
-                name=f"teamleader2db sync {resource.value}"
-            )
-            auth = sync_resource_flow(tl_api_uri, resource, full_sync, conn, auth)
+            # sync_resource_flow = cast(Flow, sync_teamleader_resource).with_options(
+            #     name=f"teamleader2db sync {resource.value}"
+            # )
+            auth = sync_teamleader_resource(tl_api_uri, resource, full_sync, conn, auth)
         except TeamleaderRequestException:
             logger.info(f"Sync of resource {resource.name} failed.")
 
@@ -122,7 +142,7 @@ if __name__ == "__main__":
     main_flow(
         tl_client_id_block_name="teamleader-client-id",
         tl_client_secret_block_name="teamleader-client-secret",
-        full_sync=True,
+        full_sync=False,
         resources=[
             # Resource.customFieldDefinitions,
             # Resource.invoices,

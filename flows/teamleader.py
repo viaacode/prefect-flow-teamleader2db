@@ -1,13 +1,21 @@
-from time import sleep
-from typing import Any, Union, cast
 from datetime import datetime
+from time import sleep
+from typing import Any
 
-from prefect import task, get_run_logger
 import requests
+from prefect import get_run_logger, task
 from requests import Response
 
-from models import *
-from database import *
+from .database import Connection, Tuple, save_tokens_to_database, validate_db_auth_state
+from .models import (
+    TL_Auth,
+    TL_RequestInfo,
+    TL_RequestList,
+    TL_Response,
+    TL_ResponseInfo,
+    TL_ResponseList,
+    serialize,
+)
 
 
 class TeamleaderRequestException(Exception):
@@ -33,7 +41,7 @@ def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
         },
     )
     if response.status_code != 200:
-        raise Exception(
+        raise RuntimeError(
             f"Could not refresh token. Status code {response.status_code} - {response.reason}"
         )
     response = response.json()
@@ -61,12 +69,17 @@ def request_teamleader_info(
     conn: Connection,
 ) -> Tuple[TL_ResponseInfo, TL_Auth]:
     response, auth = request_teamleader(req, auth, conn)
+    if not isinstance(response.data, dict):
+        raise TypeError(
+            f"Expected a dictionary for TL_ResponseInfo, but got {type(response.data)}"
+        )
     return (
         TL_ResponseInfo(
             resource=response.resource,
             ratelimit_remaining=response.ratelimit_remaining,
             ratelimit_reset=response.ratelimit_reset,
-            data=cast(dict[str, Any], response.data),
+            # data=cast(dict[str, Any], response.data),
+            data=response.data,
         ),
         auth,
     )
@@ -78,12 +91,17 @@ def request_teamleader_list(
     conn: Connection,
 ) -> Tuple[TL_ResponseList, TL_Auth]:
     response, auth = request_teamleader(req, auth, conn)
+    if not isinstance(response.data, list):
+        raise ValueError(
+            f"Expected a list for TL_ResponseList, but got {type(response.data)}"
+        )
     return (
         TL_ResponseList(
             resource=response.resource,
             ratelimit_remaining=response.ratelimit_remaining,
             ratelimit_reset=response.ratelimit_reset,
-            data=cast(list[dict[str, Any]], response.data),
+            # data=cast(list[dict[str, Any]], response.data),
+            data=response.data,
         ),
         auth,
     )
@@ -95,7 +113,7 @@ def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Re
 
 
 def request_teamleader(
-    req: Union[TL_RequestList, TL_RequestInfo],
+    req: TL_RequestList | TL_RequestInfo,
     auth: TL_Auth,
     conn: Connection,
 ) -> Tuple[TL_Response, TL_Auth]:

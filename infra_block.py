@@ -1,5 +1,6 @@
-from prefect.infrastructure.container import DockerContainer, DockerRegistry
 import argparse
+
+from prefect.infrastructure.container import DockerContainer, DockerRegistry
 
 
 def save_image(image_name, name, registry=None) -> None:

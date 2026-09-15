@@ -130,3 +130,6 @@ config.yml
 # openssl certificates
 cert.pem
 key.pem
+
+# prefect
+.prefect

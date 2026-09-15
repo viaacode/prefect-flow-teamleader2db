@@ -1,12 +1,12 @@
-from typing import Optional, Any, Union
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
+from prefect.blocks.system import Secret, String
 from pydantic import BaseModel, Field, SecretStr, field_serializer
-from prefect.blocks.system import String, Secret
 
 
-class DB_Tables:
+class Harvest_Tables:
     """
     The name of the tables in the ETL harvest database.
     """
@@ -43,14 +43,14 @@ class Resource(Enum):
         Maps the Teamleader resource on a database table name.
         """
         mapping = {
-            Resource.companies: DB_Tables.tl_companies,
-            Resource.contacts: DB_Tables.tl_contacts,
-            Resource.invoices: DB_Tables.tl_invoices,
-            Resource.departments: DB_Tables.tl_departments,
-            Resource.events: DB_Tables.tl_events,
-            Resource.projects: DB_Tables.tl_projects,
-            Resource.users: DB_Tables.tl_users,
-            Resource.customFieldDefinitions: DB_Tables.tl_custom_fields,
+            Resource.companies: Harvest_Tables.tl_companies,
+            Resource.contacts: Harvest_Tables.tl_contacts,
+            Resource.invoices: Harvest_Tables.tl_invoices,
+            Resource.departments: Harvest_Tables.tl_departments,
+            Resource.events: Harvest_Tables.tl_events,
+            Resource.projects: Harvest_Tables.tl_projects,
+            Resource.users: Harvest_Tables.tl_users,
+            Resource.customFieldDefinitions: Harvest_Tables.tl_custom_fields,
         }
         return mapping[resource]
 
@@ -110,7 +110,7 @@ class TL_RequestList(BaseModel):
     resource: Resource
     page: int = Field(default=1, serialization_alias="page[number]")
     page_size: int = Field(default=20, serialization_alias="page[size]")
-    updated_since: Optional[datetime] = Field(
+    updated_since: datetime | None = Field(
         default=None,
         serialization_alias="filter[updated_since]",
     )
@@ -130,7 +130,7 @@ class TL_Response(BaseModel):
     resource: Resource
     ratelimit_remaining: int
     ratelimit_reset: datetime
-    data: Union[list[dict[str, Any]], dict[str, Any]]
+    data: list[dict[str, Any]] | dict[str, Any]
 
 
 class TL_ResponseList(BaseModel):
@@ -160,6 +160,6 @@ def serialize(req) -> dict[str, Any]:
     elif type(req) is TL_RequestInfo:
         return {"id": req.id}
     else:
-        raise Exception(
+        raise TypeError(
             f"Type of request should be {TL_RequestInfo.__name__} or {TL_RequestList.__name__}"
         )

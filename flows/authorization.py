@@ -1,20 +1,18 @@
-from random import choices
-from string import ascii_lowercase, digits
-import webbrowser
 import os
 import signal
-from typing import Optional
+import webbrowser
 from contextlib import asynccontextmanager
+from random import choices
+from string import ascii_lowercase, digits
 
-import requests
 import psycopg2
+import requests
 from fastapi import FastAPI
-from requests import PreparedRequest
 from pydantic import SecretStr
+from requests import PreparedRequest
 
-from models import TL_Auth
-from database import save_tokens_to_database
-
+from .database import save_tokens_to_database
+from .models import TL_Auth
 
 REDIRECT_URL = "https://127.0.0.1:8000/oauth"
 
@@ -46,7 +44,7 @@ def open_authorization_url(state: str):
     )
 
     if req.url == None:
-        raise Exception("Could not create authorization url")
+        raise ValueError("Could not create authorization url")
 
     print(f"\nOpen this URL in your webbrowser: \n\n{req.url}\n\n")
     webbrowser.open(req.url)
@@ -54,7 +52,7 @@ def open_authorization_url(state: str):
 
 def get_access_token_from_teamleader(code: str):
     """
-    After the user has granded authorization through the webbrowser, a access code is requested from Teamleader.
+    After the user has granded authorization through the webbrowser, an access code is requested from Teamleader.
     """
     response = requests.post(
         "https://focus.teamleader.eu/oauth2/access_token",
@@ -68,7 +66,7 @@ def get_access_token_from_teamleader(code: str):
     )
 
     if response.status_code != 200:
-        raise Exception(f"Status code {response.status_code} - {response.reason}")
+        raise RuntimeError(f"Status code {response.status_code} - {response.reason}")
 
     response = response.json()
     return response
@@ -112,13 +110,13 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/oauth")
 async def authorize(
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
 ):
 
     if error is not None:
-        raise Exception(error)
+        raise PermissionError(error)
 
     if code is None or state is None:
         return {"error": "Either code or state was not given."}
@@ -139,7 +137,7 @@ async def authorize(
             access_token=SecretStr(tokens["access_token"]),
         )
         save_tokens_to_database(auth, conn)
-    except Exception as e:
+    except (ConnectionError, RuntimeError, ValueError) as e:
         return {"error": str(e)}
 
     print("\n\nSucces - fetched tokens from Teamleader and saved to database\n")
@@ -149,8 +147,9 @@ async def authorize(
 
 if __name__ == "__main__":
 
-    import uvicorn
     import subprocess
+
+    import uvicorn
 
     # Generate a certificate so that the local server can be served with HTTPS.
     if not os.path.exists("key.pem") or not os.path.exists("cert.pem"):
@@ -171,11 +170,12 @@ if __name__ == "__main__":
                 "-nodes",
                 "-subj",
                 "/C=XX/ST=StateName/L=CityName/O=CompanyName/OU=CompanySectionName/CN=CommonNameOrHostname",
-            ]
+            ],
+            check=False,
         )
 
     uvicorn.run(
-        "authorization:app",
+        "__main__:app",
         host="127.0.0.1",
         port=8000,
         ssl_certfile="cert.pem",
