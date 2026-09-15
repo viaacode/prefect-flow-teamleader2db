@@ -28,12 +28,13 @@ from .teamleader import (
 )
 
 
-def prepare_info_list(infos: list[TL_ResponseInfo]) -> list[tuple]:
+def prepare_info_list(infos: list[TL_ResponseInfo], resource: Resource) -> list[tuple]:
     """
     Prepare the Teamleader responses for upload to the database.
     """
+    resource_table_name = Resource.get_db_table_name(resource)
     return [
-        (str(info.data["id"]), "companies", json.dumps(info.data)) for info in infos
+        (str(info.data["id"]), resource_table_name, json.dumps(info.data)) for info in infos
     ]
 
 
@@ -99,7 +100,7 @@ def sync_teamleader_resource(
             info, auth = request_teamleader_info(req, auth, conn)
             details.append(info)
 
-        rows = prepare_info_list(details)
+        rows = prepare_info_list(details, resource)
         upsert_into_table(conn, resource_table_name, rows)
         logger.info(f"Synced {total} {resource.name} items to {resource_table_name}")
 
@@ -130,10 +131,15 @@ def main_flow(
     # If a subflow fails, its exception is caught so that subsequent subflows may still execute.
     for resource in resources:
         try:
-            # sync_resource_flow = cast(Flow, sync_teamleader_resource).with_options(
-            #     name=f"teamleader2db sync {resource.value}"
-            # )
-            auth = sync_teamleader_resource(tl_api_uri, resource, full_sync, conn, auth)
+            auth = sync_teamleader_resource.with_options(
+                name=f"teamleader2db sync {resource.value}"
+            )(
+                tl_uri=tl_api_uri,
+                resource=resource,
+                full_sync=full_sync,
+                conn=conn,
+                auth=auth
+            )
         except TeamleaderRequestException:
             logger.info(f"Sync of resource {resource.name} failed.")
 
