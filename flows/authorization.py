@@ -1,18 +1,19 @@
 import os
 import signal
+from typing import Optional
 import webbrowser
 from contextlib import asynccontextmanager
 from random import choices
 from string import ascii_lowercase, digits
 
-import psycopg2
 import requests
 from fastapi import FastAPI
-from pydantic import SecretStr
+
+# from pydantic import Secret, SecretStr
+from prefect.blocks.system import Secret, SecretStr, String
 from requests import PreparedRequest
 
-from .database import save_tokens_to_database
-from .models import TL_Auth
+from .models import TL_Auth, TL_Client
 
 REDIRECT_URL = "https://127.0.0.1:8000/oauth"
 
@@ -21,12 +22,12 @@ REDIRECT_URL = "https://127.0.0.1:8000/oauth"
 ####################
 
 
-def get_random_state():
+async def get_random_state():
     chars = choices(ascii_lowercase + digits, k=100)
     return "".join(chars)
 
 
-def open_authorization_url(state: str):
+async def open_authorization_url(state: str):
     """
     Start the authorization flow by redirecting to the Teamleader authorization page
     as described in the [Teamleader documentation](https://developer.teamleader.eu/#/introduction/authentication/authorization-flow)
@@ -36,7 +37,7 @@ def open_authorization_url(state: str):
     req.prepare_url(
         "https://focus.teamleader.eu/oauth2/authorize",
         {
-            "client_id": os.environ["TL_CLIENT_ID"],
+            "client_id": (await String.load("teamleader-client-id")).value,
             "response_type": "code",
             "state": state,
             "redirect_uri": REDIRECT_URL,
@@ -50,15 +51,15 @@ def open_authorization_url(state: str):
     webbrowser.open(req.url)
 
 
-def get_access_token_from_teamleader(code: str):
+async def get_access_token_from_teamleader(code: str):
     """
     After the user has granded authorization through the webbrowser, an access code is requested from Teamleader.
     """
     response = requests.post(
         "https://focus.teamleader.eu/oauth2/access_token",
         data={
-            "client_id": os.environ["TL_CLIENT_ID"],
-            "client_secret": os.environ["TL_CLIENT_SECRET"],
+            "client_id": (await String.load("teamleader-client-id")).value,
+            "client_secret": (await Secret.load("teamleader-client-secret")).get(),
             "code": code,
             "grant_type": "authorization_code",
             "redirect_uri": REDIRECT_URL,
@@ -72,14 +73,50 @@ def get_access_token_from_teamleader(code: str):
     return response
 
 
-def connect_database():
-    return psycopg2.connect(
-        user=os.environ["POSTGRES_USERNAME"],
-        password=os.environ["POSTGRES_PASSWORD"],
-        host=os.environ["POSTGRES_HOST"],
-        port=os.environ["POSTGRES_PORT"],
-        dbname=os.environ["POSTGRES_DATABASE"],
+async def save_tokens_to_prefect(auth: TL_Auth):
+    """
+    Save the access and refresh tokens to Prefect secrets.
+    """
+    await Secret(value=auth.access_token.get_secret_value()).save(
+        name="teamleader-access-token", 
+        overwrite=True
     )
+    
+    await Secret(value=auth.refresh_token.get_secret_value()).save(
+        name="teamleader-refresh-token", 
+        overwrite=True
+    )
+
+
+def get_auth_tokens_from_prefect(
+    tl_auth_uri: str, tl_client: TL_Client
+) -> TL_Auth:
+    
+    try:
+        access_token_block = Secret.load("teamleader-access-token")
+        refresh_token_block = Secret.load("teamleader-refresh-token")
+    except ValueError as e:
+        raise KeyError(
+            "Missing authorization data in Prefect blocks. Are 'teamleader-access-token' and 'teamleader-refresh-token' created?"
+        ) from e
+
+    return TL_Auth(
+        uri=tl_auth_uri,
+        client_id=tl_client.client_id,
+        client_secret=tl_client.client_secret,
+        access_token=SecretStr(access_token_block.get()),
+        refresh_token=SecretStr(refresh_token_block.get()),
+    )
+
+
+# def connect_database():
+#     return psycopg2.connect(
+#         user=os.environ["POSTGRES_USERNAME"],
+#         password=os.environ["POSTGRES_PASSWORD"],
+#         host=os.environ["POSTGRES_HOST"],
+#         port=os.environ["POSTGRES_PORT"],
+#         dbname=os.environ["POSTGRES_DATABASE"],
+#     )
 
 
 ###############
@@ -100,8 +137,8 @@ global_state = {}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global_state["state"] = get_random_state()
-    open_authorization_url(global_state["state"])
+    global_state["state"] = await get_random_state()
+    await open_authorization_url(global_state["state"])
     yield
 
 
@@ -110,9 +147,9 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/oauth")
 async def authorize(
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
 ):
 
     if error is not None:
@@ -127,22 +164,23 @@ async def authorize(
         }
 
     try:
-        tokens = get_access_token_from_teamleader(code)
-        conn = connect_database()
+        tokens = await get_access_token_from_teamleader(code)
+        # conn = connect_database()
         auth = TL_Auth(
             uri="https://focus.teamleader.eu/oauth2",
-            client_id=os.environ["TL_CLIENT_ID"],
-            client_secret=SecretStr(os.environ["TL_CLIENT_SECRET"]),
-            refresh_token=SecretStr(tokens["refresh_token"]),
-            access_token=SecretStr(tokens["access_token"]),
+            client_id= (await String.load("teamleader-client-id")).value,
+            client_secret=(await Secret.load("teamleader-client-secret")).get(),
+            refresh_token=tokens["refresh_token"],
+            access_token=tokens["access_token"],
         )
-        save_tokens_to_database(auth, conn)
+        # save_tokens_to_database(auth, conn)
+        await save_tokens_to_prefect(auth)
     except (ConnectionError, RuntimeError, ValueError) as e:
         return {"error": str(e)}
 
-    print("\n\nSucces - fetched tokens from Teamleader and saved to database\n")
+    print("\n\nSucces - fetched tokens from Teamleader and saved to prefect\n")
     os.kill(os.getpid(), signal.SIGTERM)
-    return {"message": "Succes - fetched tokens from Teamleader and saved to database"}
+    return {"message": "Succes - fetched tokens from Teamleader and saved to prefect"}
 
 
 if __name__ == "__main__":

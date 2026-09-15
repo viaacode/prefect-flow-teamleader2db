@@ -1,12 +1,14 @@
 from datetime import datetime
 from time import sleep
-from typing import Any
+from typing import Any, Union
 
 import requests
 from prefect import get_run_logger, task
 from requests import Response
 
-from .database import Connection, save_tokens_to_database, validate_db_auth_state
+from flows.authorization import save_tokens_to_prefect
+
+from .database import Connection, validate_db_auth_state
 from .models import (
     TL_Auth,
     TL_RequestInfo,
@@ -54,7 +56,7 @@ def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
         access_token=response["access_token"],  # idem
     )
 
-    save_tokens_to_database(auth, conn)
+    save_tokens_to_prefect(auth)
     logger.info("Updated access token and refresh token in database.")
     return auth
 
@@ -113,7 +115,7 @@ def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Re
 
 
 def request_teamleader(
-    req: TL_RequestList | TL_RequestInfo,
+    req: Union[TL_RequestList, TL_RequestInfo],
     auth: TL_Auth,
     conn: Connection,
 ) -> tuple[TL_Response, TL_Auth]:

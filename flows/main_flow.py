@@ -2,13 +2,14 @@ import json
 from functools import partial
 
 from prefect import flow, get_run_logger
+from ruamel.yaml import Optional
 
+from .authorization import get_auth_tokens_from_prefect
 from .database import (
     Connection,
     connect_database,
     create_teamleader_auth_table,
     create_teamleader_resource_table,
-    get_auth_tokens_from_db,
     get_last_modified_date,
     truncate_table,
     upsert_into_table,
@@ -114,7 +115,7 @@ def main_flow(
     db_block_name: str = "etl-harvest",
     tl_api_uri: str = "https://api.focus.teamleader.eu",
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
-    resources: list[Resource] | None = None,
+    resources: Optional[list[Resource]] = None,
     full_sync: bool = False,
 ):
     """
@@ -125,7 +126,7 @@ def main_flow(
 
     logger = get_run_logger()
     create_teamleader_auth_table(conn)
-    auth = get_auth_tokens_from_db(conn, tl_auth_uri, tl_client)
+    auth = get_auth_tokens_from_prefect(tl_auth_uri, tl_client)
     resources = resources if resources is not None else [r for r in Resource]
 
     # If a subflow fails, its exception is caught so that subsequent subflows may still execute.
