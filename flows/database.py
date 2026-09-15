@@ -10,14 +10,16 @@ from .models import Harvest_Tables, Resource, TL_Auth, TL_Client
 
 Connection = psycopg2.extensions.connection
 
-
+@task
 def truncate_table(conn: Connection, table: str):
+    get_run_logger().info(f"Truncating table: {table}")
     with conn, conn.cursor() as curs:
         curs.execute(f"TRUNCATE TABLE {table}")
 
 
 @task
 def create_teamleader_auth_table(conn: Connection):
+    get_run_logger().info(f"Ensuring auth table: {Harvest_Tables.tl_oauth} exists")
     with conn, conn.cursor() as curs:
         curs.execute(
             f"""
@@ -35,6 +37,7 @@ def create_teamleader_auth_table(conn: Connection):
 
 @task
 def create_teamleader_resource_table(resource: Resource, conn: Connection):
+    get_run_logger().info(f"Ensuring resource table: {resource} exists")
     table_name = Resource.get_db_table_name(resource)
     with conn, conn.cursor() as curs:
         curs.execute(
@@ -52,7 +55,14 @@ def create_teamleader_resource_table(resource: Resource, conn: Connection):
         )
 
 
+@task
 def upsert_into_table(conn: Connection, table: str, data: list[tuple]):
+    logger = get_run_logger()
+    if not data:
+        logger.info(f"No data to upsert into {table}.")
+        return
+    
+    logger.info(f"Upserting {len(data)} rows into table: {table}")
     with conn, conn.cursor() as curs:
         curs.executemany(
             f"""INSERT INTO {table} (
@@ -109,7 +119,9 @@ def get_auth_tokens_from_db(
     )
 
 
+@task
 def get_last_modified_date(conn: Connection, table: str) -> datetime:
+    get_run_logger().info(f"Fetching last modified date from table: {table}")
     with conn, conn.cursor() as curs:
         curs.execute(f"SELECT max(updated_at) FROM {table}")
         result_list = curs.fetchone()
@@ -118,7 +130,9 @@ def get_last_modified_date(conn: Connection, table: str) -> datetime:
         return result_list[0]
 
 
+@task
 def save_tokens_to_database(auth: TL_Auth, conn: Connection):
+    get_run_logger().info("Saving Teamleader tokens to database")
     with conn, conn.cursor() as cursor:
         cursor.execute(
             f"""
@@ -134,7 +148,9 @@ def save_tokens_to_database(auth: TL_Auth, conn: Connection):
         )
 
 
+@task
 def validate_db_auth_state(conn: Connection):
+    get_run_logger().info("Validating database auth state")
     with conn.cursor() as cursor:
         cursor.execute(f"SELECT COUNT(*) FROM {Harvest_Tables.tl_oauth}")
         count_fetch = cursor.fetchone()
