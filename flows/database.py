@@ -1,6 +1,5 @@
 from datetime import datetime
 
-# Used for type hinting
 import psycopg2.extensions
 from prefect import get_run_logger, task
 from prefect_sqlalchemy import DatabaseCredentials
@@ -128,24 +127,6 @@ def get_last_modified_date(conn: Connection, table: str) -> datetime:
         if result_list is None:
             raise ValueError("Could not fetch last updated date")
         return result_list[0]
-
-
-# @task
-# def save_tokens_to_database(auth: TL_Auth, conn: Connection):
-#     get_run_logger().info("Saving Teamleader tokens to database")
-#     with conn, conn.cursor() as cursor:
-#         cursor.execute(
-#             f"""
-#                 UPDATE {Harvest_Tables.tl_oauth} SET
-#                     auth_token = %s,
-#                     refresh_token = %s,
-#                     updated_at = now();
-#                 """,
-#             (
-#                 auth.access_token.get_secret_value(),
-#                 auth.refresh_token.get_secret_value(),
-#             ),
-#         )
 
 
 @task

@@ -39,7 +39,6 @@ def prepare_info_list(infos: list[TL_ResponseInfo], resource: Resource) -> list[
     ]
 
 
-# @flow(name="teamleader2db resource sync")
 def sync_teamleader_resource(
     tl_uri: str,
     resource: Resource,

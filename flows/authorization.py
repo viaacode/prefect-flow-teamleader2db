@@ -9,7 +9,6 @@ from string import ascii_lowercase, digits
 import requests
 from fastapi import FastAPI
 
-# from pydantic import Secret, SecretStr
 from prefect.blocks.system import Secret, String
 from requests import PreparedRequest
 
@@ -107,16 +106,6 @@ def get_auth_tokens_from_prefect(
         access_token=access_token_block.get(),
         refresh_token=refresh_token_block.get(),
     )
-
-
-# def connect_database():
-#     return psycopg2.connect(
-#         user=os.environ["POSTGRES_USERNAME"],
-#         password=os.environ["POSTGRES_PASSWORD"],
-#         host=os.environ["POSTGRES_HOST"],
-#         port=os.environ["POSTGRES_PORT"],
-#         dbname=os.environ["POSTGRES_DATABASE"],
-#     )
 
 
 ###############
