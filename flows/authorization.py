@@ -1,6 +1,6 @@
+import asyncio
 import os
 import signal
-from typing import Optional
 import webbrowser
 from contextlib import asynccontextmanager
 from random import choices
@@ -10,7 +10,7 @@ import requests
 from fastapi import FastAPI
 
 # from pydantic import Secret, SecretStr
-from prefect.blocks.system import Secret, SecretStr, String
+from prefect.blocks.system import Secret, String
 from requests import PreparedRequest
 
 from .models import TL_Auth, TL_Client
@@ -55,7 +55,7 @@ async def get_access_token_from_teamleader(code: str):
     """
     After the user has granded authorization through the webbrowser, an access code is requested from Teamleader.
     """
-    response = requests.post(
+    response = await asyncio.to_thread(requests.post,
         "https://focus.teamleader.eu/oauth2/access_token",
         data={
             "client_id": (await String.load("teamleader-client-id")).value,
@@ -104,8 +104,8 @@ def get_auth_tokens_from_prefect(
         uri=tl_auth_uri,
         client_id=tl_client.client_id,
         client_secret=tl_client.client_secret,
-        access_token=SecretStr(access_token_block.get()),
-        refresh_token=SecretStr(refresh_token_block.get()),
+        access_token=access_token_block.get(),
+        refresh_token=refresh_token_block.get(),
     )
 
 
@@ -147,9 +147,9 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/oauth")
 async def authorize(
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
 ):
 
     if error is not None:

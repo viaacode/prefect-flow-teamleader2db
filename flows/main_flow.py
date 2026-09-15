@@ -132,9 +132,7 @@ def main_flow(
     # If a subflow fails, its exception is caught so that subsequent subflows may still execute.
     for resource in resources:
         try:
-            auth = sync_teamleader_resource.with_options(
-                name=f"teamleader2db sync {resource.value}"
-            )(
+            auth = sync_teamleader_resource(
                 tl_uri=tl_api_uri,
                 resource=resource,
                 full_sync=full_sync,

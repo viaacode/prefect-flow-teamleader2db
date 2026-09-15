@@ -1,12 +1,11 @@
 from datetime import datetime
 from time import sleep
-from typing import Any, Union
+from typing import Any
 
 import requests
 from prefect import get_run_logger, task
+from prefect.blocks.system import Secret
 from requests import Response
-
-from flows.authorization import save_tokens_to_prefect
 
 from .database import Connection, validate_db_auth_state
 from .models import (
@@ -23,6 +22,19 @@ from .models import (
 class TeamleaderRequestException(Exception):
     pass
 
+def save_tokens_to_prefect(auth: TL_Auth):
+    """
+    Save the access and refresh tokens synchronously to Prefect secrets.
+    """
+    Secret(value=auth.access_token.get_secret_value()).save(
+        name="teamleader-access-token", 
+        overwrite=True
+    )
+    
+    Secret(value=auth.refresh_token.get_secret_value()).save(
+        name="teamleader-refresh-token", 
+        overwrite=True
+    )
 
 @task
 def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
@@ -115,7 +127,7 @@ def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Re
 
 
 def request_teamleader(
-    req: Union[TL_RequestList, TL_RequestInfo],
+    req: TL_RequestList | TL_RequestInfo,
     auth: TL_Auth,
     conn: Connection,
 ) -> tuple[TL_Response, TL_Auth]:

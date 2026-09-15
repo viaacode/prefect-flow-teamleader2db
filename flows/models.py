@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any
 
 from prefect.blocks.system import Secret, String
 from pydantic import BaseModel, Field, SecretStr, field_serializer
@@ -110,7 +110,7 @@ class TL_RequestList(BaseModel):
     resource: Resource
     page: int = Field(default=1, serialization_alias="page[number]")
     page_size: int = Field(default=20, serialization_alias="page[size]")
-    updated_since: Optional[datetime] = Field(
+    updated_since: datetime | None = Field(
         default=None,
         serialization_alias="filter[updated_since]",
     )
@@ -130,7 +130,7 @@ class TL_Response(BaseModel):
     resource: Resource
     ratelimit_remaining: int
     ratelimit_reset: datetime
-    data: Union[list[dict[str, Any]], dict[str, Any]]
+    data: list[dict[str, Any]] | dict[str, Any]
 
 
 class TL_ResponseList(BaseModel):
