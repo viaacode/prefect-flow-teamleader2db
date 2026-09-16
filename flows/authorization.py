@@ -5,10 +5,10 @@ import webbrowser
 from contextlib import asynccontextmanager
 from random import choices
 from string import ascii_lowercase, digits
+from typing import Optional
 
 import requests
 from fastapi import FastAPI
-
 from prefect.blocks.system import Secret, String
 from requests import PreparedRequest
 
@@ -76,12 +76,12 @@ async def save_tokens_to_prefect(auth: TL_Auth):
     """
     Save the access and refresh tokens to Prefect secrets.
     """
-    await Secret(value=auth.access_token.get_secret_value()).save(
+    Secret(value=auth.access_token.get_secret_value()).save(
         name="teamleader-access-token", 
         overwrite=True
     )
     
-    await Secret(value=auth.refresh_token.get_secret_value()).save(
+    Secret(value=auth.refresh_token.get_secret_value()).save(
         name="teamleader-refresh-token", 
         overwrite=True
     )
@@ -136,9 +136,9 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/oauth")
 async def authorize(
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
 ):
 
     if error is not None:

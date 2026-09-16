@@ -1,13 +1,13 @@
 from datetime import datetime
 from time import sleep
-from typing import Any
+from typing import Any, Union
 
 import requests
 from prefect import get_run_logger, task
 from prefect.blocks.system import Secret
 from requests import Response
 
-from .database import Connection, validate_db_auth_state
+from .database import Connection
 from .models import (
     TL_Auth,
     TL_RequestInfo,
@@ -42,7 +42,7 @@ def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
     logger.info("Refreshing access token")
 
     # Check if the database is in a valid state
-    validate_db_auth_state(conn)
+    # validate_db_auth_state(conn)
 
     # Refresh the authorization token
     response = requests.post(
@@ -127,7 +127,7 @@ def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Re
 
 
 def request_teamleader(
-    req: TL_RequestList | TL_RequestInfo,
+    req: Union[TL_RequestList, TL_RequestInfo],
     auth: TL_Auth,
     conn: Connection,
 ) -> tuple[TL_Response, TL_Auth]:

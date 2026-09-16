@@ -133,3 +133,6 @@ key.pem
 
 # prefect
 .prefect
+
+# ruff
+ruff*
