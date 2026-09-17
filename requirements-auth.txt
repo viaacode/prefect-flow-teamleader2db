@@ -1,0 +1,2 @@
+-r requirements-dev.txt
+fastapi[all]==0.108.0
