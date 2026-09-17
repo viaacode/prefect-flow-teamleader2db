@@ -97,7 +97,7 @@ def request_teamleader_info(
         auth,
     )
 
-
+@task(retries=3, retry_delay_seconds=10)
 def request_teamleader_list(
     req: TL_RequestList,
     auth: TL_Auth,
@@ -119,7 +119,6 @@ def request_teamleader_list(
     )
 
 
-@task(retries=5, retry_delay_seconds=1)
 def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Response:
     return requests.post(url, headers=headers, data=data)
 
