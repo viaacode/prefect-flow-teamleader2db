@@ -22,7 +22,6 @@ from .models import (
     TL_ResponseInfo,
 )
 from .teamleader import (
-    TeamleaderRequestException,
     request_teamleader_info,
     request_teamleader_list,
 )
@@ -123,6 +122,8 @@ def main_flow(
     conn = connect_database(db_block_name)
 
     logger = get_run_logger()
+    logger.info(f"Starting main flow with resources: {resources} and full_sync={full_sync}")
+    
     auth = get_auth_tokens_from_prefect(tl_auth_uri, tl_client)
     resources = resources if resources is not None else [r for r in Resource]
 

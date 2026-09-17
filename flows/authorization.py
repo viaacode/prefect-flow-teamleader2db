@@ -1,4 +1,3 @@
-import asyncio
 import os
 import signal
 import webbrowser
@@ -21,12 +20,12 @@ REDIRECT_URL = "https://127.0.0.1:8000/oauth"
 ####################
 
 
-async def get_random_state():
+def get_random_state():
     chars = choices(ascii_lowercase + digits, k=100)
     return "".join(chars)
 
 
-async def open_authorization_url(state: str):
+def open_authorization_url(state: str):
     """
     Start the authorization flow by redirecting to the Teamleader authorization page
     as described in the [Teamleader documentation](https://developer.teamleader.eu/#/introduction/authentication/authorization-flow)
@@ -36,29 +35,29 @@ async def open_authorization_url(state: str):
     req.prepare_url(
         "https://focus.teamleader.eu/oauth2/authorize",
         {
-            "client_id": (await String.load("teamleader-client-id")).value,
+            "client_id": String.load("teamleader-client-id").value,
             "response_type": "code",
             "state": state,
             "redirect_uri": REDIRECT_URL,
         },
     )
 
-    if req.url == None:
+    if req.url is None:
         raise ValueError("Could not create authorization url")
 
     print(f"\nOpen this URL in your webbrowser: \n\n{req.url}\n\n")
     webbrowser.open(req.url)
 
 
-async def get_access_token_from_teamleader(code: str):
+def get_access_token_from_teamleader(code: str):
     """
-    After the user has granded authorization through the webbrowser, an access code is requested from Teamleader.
+    After the user has granted authorization through the webbrowser, an access code is requested from Teamleader.
     """
-    response = await asyncio.to_thread(requests.post,
+    response = requests.post(
         "https://focus.teamleader.eu/oauth2/access_token",
         data={
-            "client_id": (await String.load("teamleader-client-id")).value,
-            "client_secret": (await Secret.load("teamleader-client-secret")).get(),
+            "client_id": String.load("teamleader-client-id").value,
+            "client_secret": Secret.load("teamleader-client-secret").get(),
             "code": code,
             "grant_type": "authorization_code",
             "redirect_uri": REDIRECT_URL,
@@ -68,11 +67,10 @@ async def get_access_token_from_teamleader(code: str):
     if response.status_code != 200:
         raise RuntimeError(f"Status code {response.status_code} - {response.reason}")
 
-    response = response.json()
-    return response
+    return response.json()
 
 
-async def save_tokens_to_prefect(auth: TL_Auth):
+def save_tokens_to_prefect(auth: TL_Auth):
     """
     Save the access and refresh tokens to Prefect secrets.
     """
@@ -113,9 +111,9 @@ def get_auth_tokens_from_prefect(
 ###############
 
 """
-The user is immediatly redirected to the Teamleader authorization page on server startup.
-If the user grands authorization, Teamleader will redirect the user to a route
-which will request a access token and save it to the etl_harvest database.  
+The user is immediately redirected to the Teamleader authorization page on server startup.
+If the user grants authorization, Teamleader will redirect the user to a route
+which will request an access token and save it to Prefect blocks.  
 
 See https://developer.teamleader.eu/#/introduction/authentication for more info around authorization.
 """
@@ -135,7 +133,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/oauth")
-async def authorize(
+def authorize(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -153,21 +151,21 @@ async def authorize(
         }
 
     try:
-        tokens = await get_access_token_from_teamleader(code)
+        tokens = get_access_token_from_teamleader(code)
         auth = TL_Auth(
             uri="https://focus.teamleader.eu/oauth2",
-            client_id= (await String.load("teamleader-client-id")).value,
-            client_secret=(await Secret.load("teamleader-client-secret")).get(),
+            client_id=String.load("teamleader-client-id").value,
+            client_secret=Secret.load("teamleader-client-secret").get(),
             refresh_token=tokens["refresh_token"],
             access_token=tokens["access_token"],
         )
-        await save_tokens_to_prefect(auth)
+        save_tokens_to_prefect(auth)
     except (ConnectionError, RuntimeError, ValueError) as e:
         return {"error": str(e)}
 
-    print("\n\nSucces - fetched tokens from Teamleader and saved to prefect\n")
+    print("\n\nSuccess - fetched tokens from Teamleader and saved to prefect\n")
     os.kill(os.getpid(), signal.SIGTERM)
-    return {"message": "Succes - fetched tokens from Teamleader and saved to prefect"}
+    return {"message": "Success - fetched tokens from Teamleader and saved to prefect"}
 
 
 if __name__ == "__main__":
