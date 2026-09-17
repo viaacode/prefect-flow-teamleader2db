@@ -154,7 +154,6 @@ async def authorize(
 
     try:
         tokens = await get_access_token_from_teamleader(code)
-        # conn = connect_database()
         auth = TL_Auth(
             uri="https://focus.teamleader.eu/oauth2",
             client_id= (await String.load("teamleader-client-id")).value,
@@ -162,7 +161,6 @@ async def authorize(
             refresh_token=tokens["refresh_token"],
             access_token=tokens["access_token"],
         )
-        # save_tokens_to_database(auth, conn)
         await save_tokens_to_prefect(auth)
     except (ConnectionError, RuntimeError, ValueError) as e:
         return {"error": str(e)}

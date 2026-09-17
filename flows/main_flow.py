@@ -8,7 +8,6 @@ from .authorization import get_auth_tokens_from_prefect
 from .database import (
     Connection,
     connect_database,
-    # create_teamleader_auth_table,
     create_teamleader_resource_table,
     get_last_modified_date,
     truncate_table,
@@ -124,7 +123,6 @@ def main_flow(
     conn = connect_database(db_block_name)
 
     logger = get_run_logger()
-    # create_teamleader_auth_table(conn)
     auth = get_auth_tokens_from_prefect(tl_auth_uri, tl_client)
     resources = resources if resources is not None else [r for r in Resource]
 
