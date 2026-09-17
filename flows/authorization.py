@@ -38,7 +38,7 @@ def open_authorization_url(state: str):
             "client_id": String.load("teamleader-client-id").value,
             "response_type": "code",
             "state": state,
-            "redirect_uri": REDIRECT_URL,
+            "redirect_uri": x,
         },
     )
 

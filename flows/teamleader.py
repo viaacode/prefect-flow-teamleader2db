@@ -41,9 +41,6 @@ def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
     logger = get_run_logger()
     logger.info("Refreshing access token")
 
-    # Check if the database is in a valid state
-    # validate_db_auth_state(conn)
-
     # Refresh the authorization token
     response = requests.post(
         auth.uri + "/access_token",
@@ -96,6 +93,7 @@ def request_teamleader_info(
         ),
         auth,
     )
+
 
 @task(retries=3, retry_delay_seconds=10)
 def request_teamleader_list(
