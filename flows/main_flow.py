@@ -28,7 +28,7 @@ from .teamleader import (
 )
 
 
-def prepare_info_list(infos: list[TL_ResponseInfo], resource: Resource) -> list[tuple]:
+def format_data_as_db_row(infos: list[TL_ResponseInfo], resource: Resource) -> list[tuple]:
     """
     Prepare the Teamleader responses for upload to the database.
     """
@@ -99,7 +99,7 @@ def sync_teamleader_resource(
             info, auth = request_teamleader_info(req, auth, conn)
             details.append(info)
 
-        rows = prepare_info_list(details, resource)
+        rows = format_data_as_db_row(details, resource)
         upsert_into_table(conn, resource_table_name, rows)
         logger.info(f"Synced {total} {resource.name} items to {resource_table_name}")
 
@@ -128,16 +128,13 @@ def main_flow(
 
     # If a subflow fails, its exception is caught so that subsequent subflows may still execute.
     for resource in resources:
-        try:
-            auth = sync_teamleader_resource(
-                tl_uri=tl_api_uri,
-                resource=resource,
-                full_sync=full_sync,
-                conn=conn,
-                auth=auth
-            )
-        except TeamleaderRequestException:
-            logger.info(f"Sync of resource {resource.name} failed.")
+        auth = sync_teamleader_resource(
+            tl_uri=tl_api_uri,
+            resource=resource,
+            full_sync=full_sync,
+            conn=conn,
+            auth=auth
+        )
 
 
 if __name__ == "__main__":
