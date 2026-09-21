@@ -2,8 +2,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union
 
-from prefect.blocks.system import Secret, String
 from pydantic import BaseModel, Field, SecretStr, field_serializer
+
+from flows.blocks.teamleader import TeamleaderCredentials
 
 
 class Harvest_Tables:
@@ -64,13 +65,14 @@ class TL_Client(BaseModel):
     client_secret: SecretStr
 
     @staticmethod
-    def load(id_block_name: str, secret_block_name: str):
-        id: String = String.load(id_block_name)
-        secret: Secret = Secret.load(secret_block_name)
+    def load(cred_block_name: str = "teamleader-credentials"):
+        creds: TeamleaderCredentials = TeamleaderCredentials.load(
+            cred_block_name
+        )
 
         return TL_Client(
-            client_id=id.value,
-            client_secret=SecretStr(secret.value.get_secret_value()),
+            client_id=creds.client_id,
+            client_secret=creds.client_secret.get_secret_value(),
         )
 
 

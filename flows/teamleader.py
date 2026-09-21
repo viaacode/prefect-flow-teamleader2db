@@ -36,7 +36,6 @@ def save_tokens_to_prefect(auth: TL_Auth):
         overwrite=True
     )
 
-@task
 def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
     logger = get_run_logger()
     logger.info("Refreshing access token")

@@ -107,8 +107,6 @@ def sync_teamleader_resource(
 
 @flow(name="prefect_flow_teamleader2db")
 def main_flow(
-    tl_client_id_block_name: str = "teamleader-client-id",
-    tl_client_secret_block_name: str = "teamleader-client-secret",
     db_block_name: str = "etl-harvest",
     tl_api_uri: str = "https://api.focus.teamleader.eu",
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
@@ -118,7 +116,7 @@ def main_flow(
     """
     Sync all Teamleader resources (companies, users, contracts, etc.) to the etl_harvest database.
     """
-    tl_client = TL_Client.load(tl_client_id_block_name, tl_client_secret_block_name)
+    tl_client = TL_Client.load()
     conn = connect_database(db_block_name)
 
     logger = get_run_logger()
@@ -140,8 +138,6 @@ def main_flow(
 
 if __name__ == "__main__":
     main_flow(
-        tl_client_id_block_name="teamleader-client-id",
-        tl_client_secret_block_name="teamleader-client-secret",
         full_sync=False,
         resources=[
             # Resource.customFieldDefinitions,

@@ -8,8 +8,10 @@ from typing import Optional
 
 import requests
 from fastapi import FastAPI
-from prefect.blocks.system import Secret, String
+from prefect.blocks.system import Secret
 from requests import PreparedRequest
+
+from flows.blocks.teamleader import TeamleaderCredentials
 
 from .models import TL_Auth, TL_Client
 
@@ -25,20 +27,20 @@ def get_random_state():
     return "".join(chars)
 
 
-def open_authorization_url(state: str):
+async def open_authorization_url(state: str, tl_cred_name: str = "teamleader-credentials"):
     """
     Start the authorization flow by redirecting to the Teamleader authorization page
     as described in the [Teamleader documentation](https://developer.teamleader.eu/#/introduction/authentication/authorization-flow)
     """
-
+    credentials = await TeamleaderCredentials.load(tl_cred_name)
     req = PreparedRequest()
     req.prepare_url(
         "https://focus.teamleader.eu/oauth2/authorize",
         {
-            "client_id": String.load("teamleader-client-id").value,
+            "client_id": credentials.client_id,
             "response_type": "code",
             "state": state,
-            "redirect_uri": x,
+            "redirect_uri": REDIRECT_URL,
         },
     )
 
@@ -49,15 +51,16 @@ def open_authorization_url(state: str):
     webbrowser.open(req.url)
 
 
-def get_access_token_from_teamleader(code: str):
+def get_access_token_from_teamleader(code: str, tl_cred_name: str = "teamleader-credentials"):
     """
     After the user has granted authorization through the webbrowser, an access code is requested from Teamleader.
     """
+    credentials = TeamleaderCredentials.load(tl_cred_name)
     response = requests.post(
         "https://focus.teamleader.eu/oauth2/access_token",
         data={
-            "client_id": String.load("teamleader-client-id").value,
-            "client_secret": Secret.load("teamleader-client-secret").get(),
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret.get_secret_value(),
             "code": code,
             "grant_type": "authorization_code",
             "redirect_uri": REDIRECT_URL,
@@ -124,7 +127,7 @@ global_state = {}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global_state["state"] = await get_random_state()
+    global_state["state"] = get_random_state()
     await open_authorization_url(global_state["state"])
     yield
 
@@ -137,6 +140,7 @@ def authorize(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
+    tl_cred_name: str = "teamleader-credentials"
 ):
 
     if error is not None:
@@ -152,10 +156,11 @@ def authorize(
 
     try:
         tokens = get_access_token_from_teamleader(code)
+        credentials = TeamleaderCredentials.load(tl_cred_name)
         auth = TL_Auth(
             uri="https://focus.teamleader.eu/oauth2",
-            client_id=String.load("teamleader-client-id").value,
-            client_secret=Secret.load("teamleader-client-secret").get(),
+            client_id=credentials.client_id,
+            client_secret=credentials.client_secret.get_secret_value(),
             refresh_token=tokens["refresh_token"],
             access_token=tokens["access_token"],
         )
