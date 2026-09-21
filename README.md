@@ -1,213 +1,62 @@
-# Teamleader2Db
+# Teamleader2db
 
-Component that syns data from teamleader api into a PostgresQL DB.
+This [Prefect](https://www.prefect.io/) flow performs a one-way synchronization of the [Teamleader](https://www.teamleader.eu/) data to the elt_harvest database.
 
-## Prerequisites
+## Usage
+Start a new flow run or configure a deployment to run periodically on the Prefect server.
 
-* Python >= 3.7 (when working locally)
-* The package `python3-venv` (when working locally)
-* The package `PostgreSQL` (when running integration tests locally)
-* PostgreSQL DB with appropriate schema
-* Docker (optional)
-* Access to the [meemoo PyPi](http://do-prd-mvn-01.do.viaa.be:8081/)
-
-## Used libraries
-
-* `viaa-chassis`
-* `psycopg2` - communicates with the PostgreSQL server
-* `fastapi` - exposes json api to start deewee and avo sync jobs
-* `uvicorn` - ASGI server implementation, using uvloop used for running fastapi server
-* `argh` - Command line parsing for CLI sync calls
-* `requests` - Teamleader api calls with oauth2 are implemented using requests
-
-
-## Fast-API
-We added fast-api to make sync calls and to implement the code callback api call needed
-for authorization with teamleader api.
-
-This now exposes an api at http://localhost:8080 with some routes to start sync jobs.
-The api is self documented using swagger and you will see the available calls with parameters
-when you visit the / route.
-
-
-There's now a makefile which provides various helper commands:
-```
-$ make
-Available make commands:
-
-  install     install packages and prepare environment
-  clean       remove all temporary files
-  lint        run the code linters
-  format      reformat code
-  test        run all the tests
-  dockertest  run all the tests in docker image like jenkins
-  coverage    run tests and generate coverage report
-  sync        start Teamleader sync directly
-  server      start uvicorn development server fast-api for synchronizing with ldap
+Alternatively, install the requirements
+```sh
+pip install -r requirements-dev.txt
 ```
 
-For example run the server in dev mode:
-```
-$ make server
-```
-Then visit http://localhost:8080 
-
-
-
-## Testing
-
-Use the makefile to execute the integration and unit tests:
-```
-$ make test
-================================== test session starts ===================================
-platform darwin -- Python 3.9.7, pytest-5.3.5, py-1.10.0, pluggy-0.13.1
-rootdir: /Users/wschrep/FreelanceWork/VIAA/teamleader2db, inifile: pytest.ini
-plugins: cov-2.8.1, mock-3.5.1
-collected 85 items                                                                       
-
-tests/api/test_api.py .........                                                    [ 10%]
-tests/integration/test_sync.py .......                                             [ 18%]
-tests/unit/test_app.py ..s.                                                        [ 23%]
-tests/unit/comm/test_companies.py ......                                           [ 30%]
-tests/unit/comm/test_contacts.py .......                                           [ 38%]
-tests/unit/comm/test_custom_fields.py ......                                       [ 45%]
-tests/unit/comm/test_departments.py ......                                         [ 52%]
-tests/unit/comm/test_events.py ......                                              [ 60%]
-tests/unit/comm/test_invoices.py ......                                            [ 67%]
-tests/unit/comm/test_projects.py ......                                            [ 74%]
-tests/unit/comm/test_sqlwrapper.py ...                                             [ 77%]
-tests/unit/comm/test_teamleader_auth.py ......                                     [ 84%]
-tests/unit/comm/test_teamleader_client.py .......                                  [ 92%]
-tests/unit/comm/test_users.py ......                                               [100%]
-
-============================= 84 passed, 1 skipped in 1.58s ==============================
+And start a run locally
+```sh
+python flows/main_flow.py
 ```
 
-## Testing code coverage report
+## Authorization
 
-The makefile has a nice target called 'coverage' use this to make a testing coverage report.
+The Teamleader tokens needed to run this Prefect flow are stored in the etl_harvest database. In case they are invalidated, you must manually grant authorization to Teamleader to generate new tokens.
 
+Install openssl from your favorite package manager (Teamleader only allows redirects to HTTPS servers so a certificate is created for the local server)
 ```
-$ make coverage
-================================== test session starts ===================================
-platform darwin -- Python 3.9.7, pytest-5.3.5, py-1.10.0, pluggy-0.13.1
-rootdir: /Users/wschrep/FreelanceWork/VIAA/teamleader2db, inifile: pytest.ini
-plugins: cov-2.8.1, mock-3.5.1
-collected 85 items                                                                       
-
-tests/api/test_api.py .........                                                    [ 10%]
-tests/integration/test_sync.py .......                                             [ 18%]
-tests/unit/test_app.py ..s.                                                        [ 23%]
-tests/unit/comm/test_companies.py ......                                           [ 30%]
-tests/unit/comm/test_contacts.py .......                                           [ 38%]
-tests/unit/comm/test_custom_fields.py ......                                       [ 45%]
-tests/unit/comm/test_departments.py ......                                         [ 52%]
-tests/unit/comm/test_events.py ......                                              [ 60%]
-tests/unit/comm/test_invoices.py ......                                            [ 67%]
-tests/unit/comm/test_projects.py ......                                            [ 74%]
-tests/unit/comm/test_sqlwrapper.py ...                                             [ 77%]
-tests/unit/comm/test_teamleader_auth.py ......                                     [ 84%]
-tests/unit/comm/test_teamleader_client.py .......                                  [ 92%]
-tests/unit/comm/test_users.py ......                                               [100%]
-
----------- coverage: platform darwin, python 3.9.7-final-0 -----------
-Name                            Stmts   Miss  Cover
----------------------------------------------------
-app/__init__.py                     0      0   100%
-app/api/__init__.py                 0      0   100%
-app/api/api.py                      6      0   100%
-app/api/routers/__init__.py         0      0   100%
-app/api/routers/export.py          34      1    97%
-app/api/routers/health.py           5      0   100%
-app/api/routers/sync.py            32      3    91%
-app/app.py                        108      8    93%
-app/comm/__init__.py                0      0   100%
-app/comm/psql_wrapper.py           21      0   100%
-app/comm/teamleader_client.py     123     11    91%
-app/models/__init__.py              0      0   100%
-app/models/companies.py             8      0   100%
-app/models/contacts.py             52      2    96%
-app/models/custom_fields.py         8      0   100%
-app/models/departments.py           8      0   100%
-app/models/events.py                8      0   100%
-app/models/invoices.py              8      0   100%
-app/models/projects.py              8      0   100%
-app/models/sync_model.py           35      3    91%
-app/models/teamleader_auth.py      29      0   100%
-app/models/users.py                 8      0   100%
-app/server.py                      14      0   100%
----------------------------------------------------
-TOTAL                             515     28    95%
-Coverage HTML written to dir htmlcov
-
-
-============================= 84 passed, 1 skipped in 3.05s ==============================
+nix-shell -p openssl
 ```
 
+Or any of the other package managers `apt`, `pacman`, ...
 
+Clone the repository
 
-
-
-## Auth tokens, expiry and renewal
-
-Teamleader has an original take on oauth2 and its token management system.
-Basically you first set up a code to be used here in the KnowledgeGraph integration:
-KnowledgeGraph integration https://marketplace.focus.teamleader.eu/be/nl/beheer
-
-More specifically for the qas environment you need to use the client_id and secret here:
-https://marketplace.focus.teamleader.eu/be/nl/ontwikkel/integraties/b88413
-
-
-Whenever you save here it invalidates the refresh_token and any backend using it must update it's
-refresh token using an auth callback method. Basically you supply a code + secret and a callback will be made to a public https url with the actual token you need later on.
-
-
-In this administration page it is crutial to have a https public url that you can monitor as this is used to have a callback that gives you a code to be able to fetch a refresh token.
-Right now for qas&prd we've set up this path:
-https://teamleader.sitweb.eu/oauth
-
-Ideally this application has a public route and then a path on this api can be used.
-It's already implemented here:
-```
-http://localhost:8080/sync/oauth is the route and an example follows below.
-```
-Basically you pass a code and some defined state (shared secret) on this route. Teamleader calls
-this route and passes a code you can use later on.
-We save this code in shared.tl_authorization table on our database and from there on if a 401 or 403 response is found the refresh token calls are made automatically and the auth_token and refresh_token are updated in the database.
-
-
-To initially bootstrap your 'code' or whenever the refresh_token is invalid and code is expired you will see this in the logs:
-
-```
-Error 400: {"errors":[{"code":8,"title":"The refresh token is invalid.","status":400,"meta":{"type":"invalid_request","hint":"Token has been revoked"}}]} in handle_token_response
-
-Login into teamleader and paste code callback link in browser: https://focus.teamleader.eu/oauth2/authorize?client_id=75bd9426f541ea9be95142476c458023&response_type=code&redirect_uri=https://teamleader.sitweb.eu/oauth&state=qas_secret_state
+```sh
+git clone git@github.com:viaacode/teamleader2db.git
 ```
 
-This means you need to login into focus.teamleader.eu with an admin account and then paste the above link in your browser. Then the teamleader server will make a call to the redirect_uri specified which must match the one specified on the integration page and here you will see the code that is passed.
+Install the requirements for authentication
 
-
-
-## Authorization code callback example:
-So let's say you pasted the above callback link in browser and got back a code. You can then use this on your local server either by inserting it into the config.yml or by making the following request:
-
-```
-curl http://localhost:8080/sync/oauth\?code\=def502004de7b8367bdc6acb4427289394a02afa62c23304f14a37df3abd15593c4dfc625c65bf3acb2c20fc00e968ea240fa69f0747808cb0598bd7b9d5fe6ed579027017d8494e8afc9a6fc10460663605ba6ecedd308801c8130ca8e8deca7c6aaf762cdc663f4414244fbde58d9cd047dba7e71d9e3a0dd6d1b95c626a1cb27d71e6c687056f75dfe1593b518450301a327cfb51f5ed3646e98a51b47b4d3785e1a9108d2df00573d67e91e4406ace80c5e608bba1bdd84e7c34f74ecf017fbf5628ffd45760d3aaad52c32f5d2e44fbd977f0b1796c08d2efe72e07a1d3012f4a00af624eaf37212cd56edaa6600428ecaa106259a29c275a53922cf0e3fc03faf122073b2ed3ff870636f3e5baeae37b7c7738fa2d8a3e0a03951bf8c9b22984b5335ae77cc122540ea1956a922ec38adf9c33deb383ccac6b560b4e53ccb83b90e22422134ded9cc327c20a7daffad6cff1e1590d78314caeadf3c9fbbf45a54417568d0a38a88732d7438799c207fa4d35de28fae8051f0776a628ed5da22d6ae84df828ed5622a5847bce921e29\&state\=somesecrethere
+```sh
+pip install -r requirements-auth.txt
 ```
 
-response will be:
+Set the following environment variables
+
+```sh
+# Teamleader integration credentials. Client refers here to the specific teamleader2db integration/plugin that is registered with Teamleader.
+TL_CLIENT_ID
+TL_CLIENT_SECRET
+
+# etl harvest database credentials
+POSTGRES_PORT
+POSTGRES_DATABASE
+POSTGRES_HOST
+POSTGRES_USERNAME
+POSTGRES_PASSWORD
 ```
-code accepted
+
+Start the local server
+
 ```
-Or rejected if something was wrong. After this the code, token, refresh_token are stored in db. And also after this the code will be invalid again (only useable once).
-
-
-This now updated the code, token and refresh_token in database. And from now on everything keeps working again. If a token expires the refresh_token is automatically used (and here is where teamleader is different from classic oauth2, the refresh_token is only useable once). The refresh_token is used to make a call that updates the auth_token and also update the refresh_token to a newer version. Then when the auth_token expires again later on the newer auth_token is used and that way it will keep on working as long as you only have a single point that maintains this refresh_token+auth_token pair.
-
-# Maintaining proper tokens, fixing authorization if it breaks
-With the refresh token you fetch an actual auth token to be used in further calls. And whenever you do this
-the refresh_token itself is updated to a new one (the call returns both a new auth_token and refresh_token) that you will need to store in the db for later use.
-
-It's this last part that can mess up if you have a local setup and your auth_token has expired because the pod on the server has already refreshed to a new pair. In this case you can temporarely just copy a valid auth_token from the openshift pod. Or (more elaborate) fetch a new code with above callback and set up you rlocal env with code+refresh_token and once its synced put the valid ones in an env var and clear out the tl_authorization table on openshift. Then when the pod restarts it will use the valid token pair and save results in the db.
-
-
+python flows/authorization.py
+```
+This will redirect you to the Teamleader authorization page and save the newly generated tokens to the etl harvest database.
+If you receive an error while authorizing, stop the server from your terminal with `Ctrl+C` and restart it with the above command.

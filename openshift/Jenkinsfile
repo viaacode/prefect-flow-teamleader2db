@@ -1,85 +1,35 @@
 pipeline {
-    agent {
-        kubernetes {
-            defaultContainer 'default'
-            yaml """\
-        apiVersion: v1
-        kind: Pod
-        metadata:
-          labels:
-            component: builder
-            lang: python
-            app: teamleader2db
-        spec:
-          containers:
-          - name: default
-            image: ${getImageFromDockerfile()}
-            command:
-            - cat
-            tty: true
-          - name: oc
-            image: image-registry.openshift-image-registry.svc:5000/ci-cd/py:3.7
-            command:
-            - cat
-            tty: true
-            imagePullPolicy: Always
-        """.stripIndent()
-        }
-    }
+    agent { label 'node' }
     options {
         timeout(time: 45, unit: 'MINUTES')
         disableConcurrentBuilds()
     }
     environment {
-        OC_PROJECT = 'etl'
-        BASE_IMG = 'python:3.7.6-alpine3.11'
+        OC_PROJECT = 'prefect'
+        BASE_IMG_NAME = 'prefecthq/prefect'
         OC_URL = 'https://c113-e.private.eu-de.containers.cloud.ibm.com:30227'
         JIRA_URL = 'meemoo.atlassian.net'
-        APP_NAME = 'teamleader2db'
+        APP_NAME = 'prefect-flow-teamleader2db'
+        PREFECT_QUEUE = 'q-default'
+        REGISTRY = 'default-route-openshift-image-registry.meemoo2-2bc857e5f10eb63ab790a3a1d19a696c-i000.eu-de.containers.appdomain.cloud'
+        REGISTRY_SCHEMA = "https://$REGISTRY"
+        REGISTRY_CREDENTIAL = 'docker-reg'
     }
 
     stages {
         stage('Calculate extra ENV vars') {
             steps {
-                container('oc') {
-                    script {
-                        env.GIT_SHORT_COMMIT = sh(script: "printf \$(git rev-parse --short ${GIT_COMMIT})", returnStdout: true)
-                        env.IMAGE_TAG = sh(script: 'git describe --tags || echo latest', returnStdout: true)
-                        // The name used for the build config based on the image tag
-                        // Replace '.' with '_' as '.' is not allowed.
-                        env.BUILD_CONFIG_NAME = sh(script: 'echo "${IMAGE_TAG}" | sed -r "s/\\./\\-/g"', returnStdout: true)
-                    }
+                script {
+                    env.GIT_SHORT_COMMIT = sh(script: "printf \$(git rev-parse --short ${GIT_COMMIT})", returnStdout: true)
+                    env.IMAGE_TAG = sh(script: 'git describe --tags || echo latest', returnStdout: true)
+                    // The name used for the build config based on the image tag
+                    // Replace '.' with '_' as '.' is not allowed.
+                    env.BUILD_CONFIG_NAME = sh(script: 'echo "${IMAGE_TAG}" | sed -r "s/\\./\\-/g"', returnStdout: true)
+                    env.DOCKER_IMAGE = sh(script: 'echo "${APP_NAME}:${GIT_SHORT_COMMIT}"')
                 }
             }
         }
-        stage('Test code') {
-            steps {
-                sh 'apk update && apk add make'
-                sh 'make -f ./openshift/Makefile test'
-            }
-        }
-        stage('Build code') {
-            when {
-                not {
-                    buildingTag()
-                }
-            }
-            steps {
-                container('oc') {
-                    script {
-                        sh '''#!/bin/bash
-                        oc project $OC_PROJECT
-                        oc import-image $BASE_IMG --confirm
-                        oc new-build -l ref=$BRANCH_NAME --strategy=docker --name $APP_NAME-$GIT_SHORT_COMMIT --to $APP_NAME:$GIT_SHORT_COMMIT --binary --context-dir="" || echo "Probably already exists, start new build"
-                        sleep 3
-                        oc annotate --overwrite buildconfig/$APP_NAME-$GIT_SHORT_COMMIT ref=$BRANCH_NAME shortcommit=$GIT_SHORT_COMMIT
-                        oc start-build $APP_NAME-$GIT_SHORT_COMMIT --from-dir=. --wait=true
-                        '''
-                    }
-                }
-            }
-        }
-        stage('Deploy INT') {
+        stage('Calculate INT ENV variables') {
             when {
                 anyOf {
                     changeRequest target: 'master'
@@ -87,8 +37,8 @@ pipeline {
                 }
             }
             steps {
-                container('oc') {
-                    tagNewImage('int')
+                script {
+                    getPrefectApiAndVersion('int')
                 }
             }
             post {
@@ -100,39 +50,65 @@ pipeline {
                 }
             }
         }
-        stage('Deploy QAS') {
+        stage('Calculate QAS ENV variables') {
             when {
                 anyOf { branch 'master'; branch 'main' }
             }
             steps {
-                container('oc') {
-                    tagNewImage('qas')
+                script {
+                    getPrefectApiAndVersion('qas')
                 }
             }
             post {
                 always {
                     jiraSendDeploymentInfo site: "${JIRA_URL}", environmentId: 'qas', environmentName: 'qas', environmentType: 'staging'
                 }
-            }
+             }
         }
-        stage('Deploy PRD') {
+        stage('Calculate PRD ENV variables') {
             when {
                 buildingTag()
             }
             steps {
-                container('oc') {
-                    tagNewImage('prd')
+                script {
+                    getPrefectApiAndVersion('prd')
                 }
             }
-            post {
-                always {
-                    script {
-                        previous_tag = sh(script: 'git describe --abbrev=0 --tags `git rev-list --tags --skip=1 --max-count=1`', returnStdout: true).trim()
-                        echo getAllCommitsBetweenTags(previous_tag, env.TAG_NAME)
+        }
+        stage('Test code') {
+            steps {
+                sh 'echo "No tests implemented"'
+            }
+        }
+        stage('Build and push docker') {
+            when {
+                not {
+                    buildingTag()
+                }
+            }
+            steps {
+                script {
+                    dockerImage = docker.build("$REGISTRY/prefect/$APP_NAME:$GIT_SHORT_COMMIT", "--build-arg PREFECT_VERSION=$PREFECT_VERSION .")
+                    docker.withRegistry(REGISTRY_SCHEMA, REGISTRY_CREDENTIAL) {
+                        dockerImage.push()
                     }
-                    jiraSendDeploymentInfo site: "${JIRA_URL}", environmentId: 'prd', environmentName: 'prd', environmentType: 'production'
                 }
             }
+        }
+        stage('Build Python Infra Block') {
+            steps {
+                script {
+                    runInPrefectContainer("python infra_block.py --image $REGISTRY/prefect/$APP_NAME:$GIT_SHORT_COMMIT --name ${APP_NAME}-$DEPLOYMENT_ENV --registry docker-registry")
+                }
+            }
+        }
+        stage('Build and apply prefect deployment') {
+            steps {
+                script {
+                    runInPrefectContainer("prefect deployment build flows/main_flow.py:main_flow -n ${APP_NAME}-$DEPLOYMENT_ENV -ib docker-container/${APP_NAME}-$DEPLOYMENT_ENV --skip-upload -q $PREFECT_QUEUE --apply")
+                }
+            }
+            
         }
     }
     post {
@@ -152,22 +128,16 @@ pipeline {
         }
         always {
             jiraSendBuildInfo site: "${JIRA_URL}"
-            container('default') {
-                // Archive tets results
-                script {
-                    if (fileExists('./tests/test_results.xml')) {
-                        junit 'tests/test_results.xml'
-                    } else {
-                        echo 'No test results found'
-                    }
+            // Archive test results
+            script {
+                if (fileExists('./tests/test_results.xml')) {
+                    junit 'tests/test_results.xml'
+                } else {
+                    echo 'No test results found'
                 }
             }
         }
     }
-}
-
-void getImageFromDockerfile() {
-    return 'python:3.7.6-alpine3.11'
 }
 
 void setGitHubBuildStatus(String message, String state) {
@@ -179,19 +149,33 @@ void setGitHubBuildStatus(String message, String state) {
         statusResultSource: [ $class: 'ConditionalStatusResultSource', results: [[$class: 'AnyBuildResult', message: message, state: state]] ]
     ])
 }
-
-void getAllCommitsBetweenTags(String from, String to) {
-    commit_messages = sh(script: "git log ${from}...${to} --merges --format=%b", returnStdout: true)
-
-    return commit_messages
+void getPrefectApiAndVersion(String deploy_env) {
+    String prefect_api = ''
+    env.DEPLOYMENT_ENV = deploy_env
+    switch (deploy_env) {
+        case 'int':
+            env.PREFECT_API = "${PREFECT_URL_INT}"
+            break
+        case 'qas':
+            env.PREFECT_API = "${PREFECT_URL_QAS}"
+            break
+        case 'prd':
+            env.PREFECT_API = "${PREFECT_URL_PRD}"
+            break
+        default:
+            break
+    }
+    response = sh(returnStdout: true, script:"curl $PREFECT_API/admin/version").trim().split('"')
+    env.PREFECT_VERSION = response[1]
 }
-
-void tagNewImage(String environment) {
-    echo "Deploying to ${environment}"
-    sh """#!/bin/bash
-    oc project $OC_PROJECT
-    oc tag $APP_NAME:$GIT_SHORT_COMMIT $APP_NAME:${environment}
-    # Check the status of the rollout
-    oc rollout status deployment/$APP_NAME-${environment} --watch=true
-    """
+void runInPrefectContainer(String commands) {
+    println("$PREFECT_VERSION-python3.9")
+    println("$commands")
+    docker.image("${BASE_IMG_NAME}:$PREFECT_VERSION-python3.9").inside("-e PREFECT_API_URL=$PREFECT_API") {
+        sh """#!/bin/bash
+        pip3 install -r requirements.txt --extra-index-url http://do-prd-mvn-01.do.viaa.be:8081/repository/pypi-all/simple --trusted-host do-prd-mvn-01.do.viaa.be
+        unset HTTPS_PROXY HTTP_PROXY http_proxy https_proxy
+        $commands
+        """
+    }
 }
