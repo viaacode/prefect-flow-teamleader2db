@@ -45,7 +45,7 @@ def test_get_access_token_fails_on_error(mocker):
     assert "Status code 401" in str(exc_info.value)
 
 ########################################################
-# Tests voor de FastAPI /oauth endpoint (De Voordeur)
+# Tests voor de FastAPI /oauth endpoint
 ########################################################
 
 def test_oauth_endpoint_missing_parameters():
