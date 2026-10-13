@@ -13,9 +13,6 @@ def prefect_test_fixture():
 
 
 def test_main_flow_orchestration(mocker):
-    mocker.patch("flows.main_flow.TL_Client.load")
-    mocker.patch("flows.main_flow.get_auth_tokens_from_prefect", return_value="mocked_auth")
-    
     mocker.patch("flows.main_flow.connect_database")
     mock_create_table = mocker.patch("flows.main_flow.create_teamleader_resource_table")
     mocker.patch("flows.main_flow.get_last_modified_date", return_value="2023-01-01")
@@ -28,17 +25,15 @@ def test_main_flow_orchestration(mocker):
     mock_response_page_2.data = []
 
     mock_req_list = mocker.patch("flows.main_flow.request_teamleader_list")
-    mock_req_list.side_effect = [
-        (mock_response_page_1, "mocked_auth"), 
-        (mock_response_page_2, "mocked_auth")  
-    ]
+    mock_req_list.side_effect = [mock_response_page_1, mock_response_page_2]
 
     mock_info = MagicMock()
     mock_info.data = {"id": "item_1", "name": "Test Department"}
     mock_req_info = mocker.patch("flows.main_flow.request_teamleader_info")
-    mock_req_info.return_value = (mock_info, "mocked_auth")
+    mock_req_info.return_value = mock_info
 
     state = main_flow(
+        db_block_name="etl-harvest",
         resources=[Resource.departments], 
         full_sync=False, 
         return_state=True
@@ -51,3 +46,30 @@ def test_main_flow_orchestration(mocker):
     
     assert mock_req_list.call_count == 2
     assert mock_req_info.call_count == 1
+
+def test_failing_resource_fails_the_run(mocker):
+    mocker.patch("flows.main_flow.connect_database")
+    mocker.patch("flows.main_flow.create_teamleader_resource_table")
+    mocker.patch("flows.main_flow.get_last_modified_date", return_value=None)
+    mocker.patch("flows.main_flow.upsert_into_table")
+    mocker.patch("flows.main_flow.sync_teamleader_resource.retries", 0)
+
+    empty_page = MagicMock()
+    empty_page.data = []
+
+    def fake_list(req, session):
+        if req.resource == Resource.departments:
+            raise RuntimeError("Teamleader is down")
+        return empty_page
+
+    mock_req_list = mocker.patch("flows.main_flow.request_teamleader_list", side_effect=fake_list)
+
+    state = main_flow(
+        db_block_name="etl-harvest",
+        resources=[Resource.departments, Resource.users],
+        return_state=True,
+    )
+
+    assert state.is_failed()
+    requested = [call.args[0].resource for call in mock_req_list.call_args_list]
+    assert Resource.users in requested

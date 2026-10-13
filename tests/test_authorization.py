@@ -80,10 +80,11 @@ def test_oauth_endpoint_success_flow(mocker):
     mock_creds.return_value.client_id = "fake_id"
     mock_creds.return_value.client_secret.get_secret_value.return_value = "fake_secret"
     
-    mocker.patch("flows.authorization.save_tokens_to_prefect")
     mocker.patch("os.kill")
     
     response = client.get("/oauth?code=geldige_code&state=geldige_state_123")
     
     assert response.status_code == 200
-    assert response.json() == {"message": "Success - fetched tokens from Teamleader and saved to prefect"}
+    assert response.json() == {"message": "Success - fetched tokens from Teamleader and saved the refresh token to Prefect"}
+    assert mock_creds.return_value.refresh_token.get_secret_value() == "nieuw_refresh"
+    mock_creds.return_value.save.assert_called_once_with("teamleader-credentials", overwrite=True)
