@@ -1,142 +1,136 @@
 from datetime import datetime
 from time import sleep
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import requests
-from prefect import get_run_logger, task
-from prefect.blocks.system import Secret
+from prefect import get_run_logger
+from pydantic.v1 import SecretStr
 from requests import Response
 
-from .database import Connection
+from flows.blocks.teamleader import TeamleaderCredentials
+
 from .models import (
-    TL_Auth,
-    TL_RequestInfo,
-    TL_RequestList,
-    TL_Response,
-    TL_ResponseInfo,
-    TL_ResponseList,
+    TeamleaderRequestInfo,
+    TeamleaderRequestList,
+    TeamleaderResponse,
+    TeamleaderResponseInfo,
+    TeamleaderResponseList,
     serialize,
 )
+
+REQUEST_TIMEOUT_SECONDS = 60
 
 
 class TeamleaderRequestException(Exception):
     pass
 
-def save_tokens_to_prefect(auth: TL_Auth):
-    """
-    Save the access and refresh tokens synchronously to Prefect secrets.
-    """
-    Secret(value=auth.access_token.get_secret_value()).save(
-        name="teamleader-access-token", 
-        overwrite=True
-    )
-    
-    Secret(value=auth.refresh_token.get_secret_value()).save(
-        name="teamleader-refresh-token", 
-        overwrite=True
-    )
 
-def refresh_auth_token(conn: Connection, auth: TL_Auth) -> TL_Auth:
-    logger = get_run_logger()
-    logger.info("Refreshing access token")
+class TeamleaderSession:
+    """
+    Keeps the Teamleader access token in memory and shares it between the resource tasks.
 
-    # Refresh the authorization token
-    response = requests.post(
-        auth.uri + "/access_token",
-        data={
-            "client_id": auth.client_id,
-            "client_secret": auth.client_secret.get_secret_value(),
-            "refresh_token": auth.refresh_token.get_secret_value(),
-            "grant_type": "refresh_token",
-        },
-    )
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Could not refresh token. Status code {response.status_code} - {response.reason}"
+    Only the refresh token is stored, in the TeamleaderCredentials block. Teamleader replaces
+    the refresh token on every refresh, so the resource tasks must not run in parallel
+    or they could refresh with the same refresh token at the same time.
+
+    https://developer.teamleader.eu/#/introduction/authentication
+    """
+
+    def __init__(self, auth_uri: str, credentials_block_name: str = "teamleader-credentials"):
+        self.auth_uri = auth_uri
+        self.credentials_block_name = credentials_block_name
+        self._access_token: Optional[str] = None
+
+    def get_access_token(self) -> str:
+        if self._access_token is None:
+            self.refresh_access_token()
+        return self._access_token
+
+    def refresh_access_token(self):
+        logger = get_run_logger()
+        logger.info("Refreshing access token")
+
+        credentials = TeamleaderCredentials.load(self.credentials_block_name)
+        response = requests.post(
+            self.auth_uri + "/access_token",
+            data={
+                "client_id": credentials.client_id,
+                "client_secret": credentials.client_secret.get_secret_value(),
+                "refresh_token": credentials.refresh_token.get_secret_value(),
+                "grant_type": "refresh_token",
+            },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
-    response = response.json()
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Could not refresh token. Status code {response.status_code} - {response.reason}"
+            )
+        tokens = response.json()
 
-    auth = TL_Auth(
-        uri=auth.uri,
-        client_id=auth.client_id,
-        client_secret=auth.client_secret,
-        refresh_token=response["refresh_token"],  # Does this need a SecretStr() ?
-        access_token=response["access_token"],  # idem
-    )
-
-    save_tokens_to_prefect(auth)
-    logger.info("Updated access token and refresh token in database.")
-    return auth
+        credentials.refresh_token = SecretStr(tokens["refresh_token"])
+        credentials.save(self.credentials_block_name, overwrite=True)
+        self._access_token = tokens["access_token"]
+        logger.info("Saved new refresh token to Prefect.")
 
 
-def get_request_headers(auth: TL_Auth):
-    return {"Authorization": f"Bearer {auth.access_token.get_secret_value()}"}
+def get_request_headers(access_token: str):
+    return {"Authorization": f"Bearer {access_token}"}
 
 
 def request_teamleader_info(
-    req: TL_RequestInfo,
-    auth: TL_Auth,
-    conn: Connection,
-) -> tuple[TL_ResponseInfo, TL_Auth]:
-    response, auth = request_teamleader(req, auth, conn)
+    req: TeamleaderRequestInfo,
+    session: TeamleaderSession,
+) -> TeamleaderResponseInfo:
+    response = request_teamleader(req, session)
     if not isinstance(response.data, dict):
         raise TypeError(
-            f"Expected a dictionary for TL_ResponseInfo, but got {type(response.data)}"
+            f"Expected a dictionary for TeamleaderResponseInfo, but got {type(response.data)}"
         )
-    return (
-        TL_ResponseInfo(
-            resource=response.resource,
-            ratelimit_remaining=response.ratelimit_remaining,
-            ratelimit_reset=response.ratelimit_reset,
-            data=response.data,
-        ),
-        auth,
+    return TeamleaderResponseInfo(
+        resource=response.resource,
+        ratelimit_remaining=response.ratelimit_remaining,
+        ratelimit_reset=response.ratelimit_reset,
+        data=response.data,
     )
 
 
-@task(retries=3, retry_delay_seconds=10)
 def request_teamleader_list(
-    req: TL_RequestList,
-    auth: TL_Auth,
-    conn: Connection,
-) -> tuple[TL_ResponseList, TL_Auth]:
-    response, auth = request_teamleader(req, auth, conn)
+    req: TeamleaderRequestList,
+    session: TeamleaderSession,
+) -> TeamleaderResponseList:
+    response = request_teamleader(req, session)
     if not isinstance(response.data, list):
         raise TypeError(
-            f"Expected a list for TL_ResponseList, but got {type(response.data)}"
+            f"Expected a list for TeamleaderResponseList, but got {type(response.data)}"
         )
-    return (
-        TL_ResponseList(
-            resource=response.resource,
-            ratelimit_remaining=response.ratelimit_remaining,
-            ratelimit_reset=response.ratelimit_reset,
-            data=response.data,
-        ),
-        auth,
+    return TeamleaderResponseList(
+        resource=response.resource,
+        ratelimit_remaining=response.ratelimit_remaining,
+        ratelimit_reset=response.ratelimit_reset,
+        data=response.data,
     )
 
 
 def requests_post(url: str, data: dict[str, Any], headers: dict[str, str]) -> Response:
-    return requests.post(url, headers=headers, data=data)
+    return requests.post(url, headers=headers, data=data, timeout=REQUEST_TIMEOUT_SECONDS)
 
 
 def request_teamleader(
-    req: Union[TL_RequestList, TL_RequestInfo],
-    auth: TL_Auth,
-    conn: Connection,
-) -> tuple[TL_Response, TL_Auth]:
+    req: Union[TeamleaderRequestList, TeamleaderRequestInfo],
+    session: TeamleaderSession,
+) -> TeamleaderResponse:
     logger = get_run_logger()
     logger.info(f"POST request - {req}")
 
     data = serialize(req)
-    headers = get_request_headers(auth)
+    headers = get_request_headers(session.get_access_token())
     response = requests_post(req.path, headers=headers, data=data)
 
     if response.status_code == 401:  # Unauthorized
         logger.info(f"{response.status_code} - {response.reason}")
-        auth = refresh_auth_token(conn, auth)
-        headers = get_request_headers(auth)
+        session.refresh_access_token()
         sleep(3)
+        headers = get_request_headers(session.get_access_token())
         response = requests_post(req.path, headers=headers, data=data)
 
     if response.status_code != 200:
@@ -144,7 +138,7 @@ def request_teamleader(
             f"Could not complete teamleader request. Status code {response.status_code} - {response.reason} - {response.text}"
         )
 
-    response = TL_Response(
+    response = TeamleaderResponse(
         resource=req.resource,
         ratelimit_remaining=int(response.headers["X-RateLimit-Remaining"]),
         ratelimit_reset=datetime.fromisoformat(response.headers["X-RateLimit-Reset"]),
@@ -155,4 +149,4 @@ def request_teamleader(
         logger.info("Requests rate limit low. Sleeping for 60 seconds...")
         sleep(60)
 
-    return response, auth
+    return response

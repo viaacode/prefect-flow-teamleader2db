@@ -2,12 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field, SecretStr, field_serializer
-
-from flows.blocks.teamleader import TeamleaderCredentials
+from pydantic import BaseModel, Field, field_serializer
 
 
-class Harvest_Tables:
+class HarvestTables:
     """
     The name of the tables in the ETL harvest database.
     """
@@ -44,52 +42,19 @@ class Resource(Enum):
         Maps the Teamleader resource on a database table name.
         """
         mapping = {
-            Resource.companies: Harvest_Tables.tl_companies,
-            Resource.contacts: Harvest_Tables.tl_contacts,
-            Resource.invoices: Harvest_Tables.tl_invoices,
-            Resource.departments: Harvest_Tables.tl_departments,
-            Resource.events: Harvest_Tables.tl_events,
-            Resource.projects: Harvest_Tables.tl_projects,
-            Resource.users: Harvest_Tables.tl_users,
-            Resource.customFieldDefinitions: Harvest_Tables.tl_custom_fields,
+            Resource.companies: HarvestTables.tl_companies,
+            Resource.contacts: HarvestTables.tl_contacts,
+            Resource.invoices: HarvestTables.tl_invoices,
+            Resource.departments: HarvestTables.tl_departments,
+            Resource.events: HarvestTables.tl_events,
+            Resource.projects: HarvestTables.tl_projects,
+            Resource.users: HarvestTables.tl_users,
+            Resource.customFieldDefinitions: HarvestTables.tl_custom_fields,
         }
         return mapping[resource]
 
 
-class TL_Client(BaseModel):
-    """
-    Teamleader client credentials. Client refers here to a specific application e.g. Teamleader2db.
-    """
-
-    client_id: str
-    client_secret: SecretStr
-
-    @staticmethod
-    def load(cred_block_name: str = "teamleader-credentials"):
-        creds: TeamleaderCredentials = TeamleaderCredentials.load(
-            cred_block_name
-        )
-
-        return TL_Client(
-            client_id=creds.client_id,
-            client_secret=creds.client_secret.get_secret_value(),
-        )
-
-
-class TL_Auth(BaseModel):
-    """
-
-    https://developer.teamleader.eu/#/introduction/authentication
-    """
-
-    uri: str = Field(default="https://focus.teamleader.eu/oauth2")
-    client_id: str
-    client_secret: SecretStr
-    refresh_token: SecretStr
-    access_token: SecretStr
-
-
-class TL_RequestInfo(BaseModel):
+class TeamleaderRequestInfo(BaseModel):
     """
     A Teamleader request for info on a given resource and id
     """
@@ -103,7 +68,7 @@ class TL_RequestInfo(BaseModel):
         return self.base_uri + "/" + self.resource.name + ".info"
 
 
-class TL_RequestList(BaseModel):
+class TeamleaderRequestList(BaseModel):
     """
     A Teamleader request for a list of resources.
     """
@@ -128,21 +93,21 @@ class TL_RequestList(BaseModel):
         return self.base_uri + "/" + self.resource.name + ".list"
 
 
-class TL_Response(BaseModel):
+class TeamleaderResponse(BaseModel):
     resource: Resource
     ratelimit_remaining: int
     ratelimit_reset: datetime
     data: Union[list[dict[str, Any]], dict[str, Any]]
 
 
-class TL_ResponseList(BaseModel):
+class TeamleaderResponseList(BaseModel):
     resource: Resource
     ratelimit_remaining: int
     ratelimit_reset: datetime
     data: list[dict[str, Any]]
 
 
-class TL_ResponseInfo(BaseModel):
+class TeamleaderResponseInfo(BaseModel):
     resource: Resource
     ratelimit_remaining: int
     ratelimit_reset: datetime
@@ -153,15 +118,15 @@ def serialize(req) -> dict[str, Any]:
     """
     Convert the Pydantic request models into a Python dictionary.
     """
-    if type(req) is TL_RequestList:
+    if type(req) is TeamleaderRequestList:
         return req.model_dump(
             exclude_none=True,
             by_alias=True,
             include={"page", "page_size", "updated_since"},
         )
-    elif type(req) is TL_RequestInfo:
+    elif type(req) is TeamleaderRequestInfo:
         return {"id": req.id}
     else:
         raise TypeError(
-            f"Type of request should be {TL_RequestInfo.__name__} or {TL_RequestList.__name__}"
+            f"Type of request should be {TeamleaderRequestInfo.__name__} or {TeamleaderRequestList.__name__}"
         )

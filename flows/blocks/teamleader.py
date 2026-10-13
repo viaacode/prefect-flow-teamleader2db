@@ -15,6 +15,10 @@ class TeamleaderCredentials(Block): # type: ignore
         default=SecretStr(""),
         description="The client secret for the Teamleader application.",
     )
+    refresh_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="The OAuth refresh token. The flow replaces it on every token refresh.",
+    )
 
     class Config:
         """Block configuration."""

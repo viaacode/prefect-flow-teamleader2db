@@ -1,21 +1,19 @@
 from datetime import datetime
 
 import psycopg2.extensions
-from prefect import get_run_logger, task
+from prefect import get_run_logger
 from prefect_sqlalchemy import DatabaseCredentials
 
 from .models import Resource
 
 Connection = psycopg2.extensions.connection
 
-@task
 def truncate_table(conn: Connection, table: str):
     get_run_logger().info(f"Truncating table: {table}")
     with conn, conn.cursor() as curs:
         curs.execute(f"TRUNCATE TABLE {table}")
 
 
-@task
 def create_teamleader_resource_table(resource: Resource, conn: Connection):
     get_run_logger().info(f"Ensuring resource table: {resource} exists")
     table_name = Resource.get_db_table_name(resource)
@@ -35,7 +33,6 @@ def create_teamleader_resource_table(resource: Resource, conn: Connection):
         )
 
 
-@task
 def upsert_into_table(conn: Connection, table: str, data: list[tuple]):
     logger = get_run_logger()
     if not data:
@@ -60,7 +57,6 @@ def upsert_into_table(conn: Connection, table: str, data: list[tuple]):
         )
 
 
-@task
 def connect_database(db_block_name: str) -> Connection:
     get_run_logger().info("Creating database connection")
     postgres_credentials: DatabaseCredentials = DatabaseCredentials.load(db_block_name)
@@ -78,7 +74,6 @@ def connect_database(db_block_name: str) -> Connection:
     )
 
 
-@task
 def get_last_modified_date(conn: Connection, table: str) -> datetime:
     get_run_logger().info(f"Fetching last modified date from table: {table}")
     with conn, conn.cursor() as curs:

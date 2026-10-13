@@ -8,12 +8,10 @@ from typing import Optional
 
 import requests
 from fastapi import FastAPI
-from prefect.blocks.system import Secret
+from pydantic.v1 import SecretStr
 from requests import PreparedRequest
 
 from flows.blocks.teamleader import TeamleaderCredentials
-
-from .models import TL_Auth, TL_Client
 
 REDIRECT_URL = "https://127.0.0.1:8000/oauth"
 
@@ -65,48 +63,13 @@ def get_access_token_from_teamleader(code: str, tl_cred_name: str = "teamleader-
             "grant_type": "authorization_code",
             "redirect_uri": REDIRECT_URL,
         },
+        timeout=60,
     )
 
     if response.status_code != 200:
         raise RuntimeError(f"Status code {response.status_code} - {response.reason}")
 
     return response.json()
-
-
-def save_tokens_to_prefect(auth: TL_Auth):
-    """
-    Save the access and refresh tokens to Prefect secrets.
-    """
-    Secret(value=auth.access_token.get_secret_value()).save(
-        name="teamleader-access-token", 
-        overwrite=True
-    )
-    
-    Secret(value=auth.refresh_token.get_secret_value()).save(
-        name="teamleader-refresh-token", 
-        overwrite=True
-    )
-
-
-def get_auth_tokens_from_prefect(
-    tl_auth_uri: str, tl_client: TL_Client
-) -> TL_Auth:
-    
-    try:
-        access_token_block = Secret.load("teamleader-access-token")
-        refresh_token_block = Secret.load("teamleader-refresh-token")
-    except ValueError as e:
-        raise KeyError(
-            "Missing authorization data in Prefect blocks. Are 'teamleader-access-token' and 'teamleader-refresh-token' created?"
-        ) from e
-
-    return TL_Auth(
-        uri=tl_auth_uri,
-        client_id=tl_client.client_id,
-        client_secret=tl_client.client_secret,
-        access_token=access_token_block.get(),
-        refresh_token=refresh_token_block.get(),
-    )
 
 
 ###############
@@ -116,7 +79,7 @@ def get_auth_tokens_from_prefect(
 """
 The user is immediately redirected to the Teamleader authorization page on server startup.
 If the user grants authorization, Teamleader will redirect the user to a route
-which will request an access token and save it to Prefect blocks.  
+which will request the tokens and save the refresh token to the TeamleaderCredentials block.  
 
 See https://developer.teamleader.eu/#/introduction/authentication for more info around authorization.
 """
@@ -157,20 +120,14 @@ def authorize(
     try:
         tokens = get_access_token_from_teamleader(code)
         credentials = TeamleaderCredentials.load(tl_cred_name)
-        auth = TL_Auth(
-            uri="https://focus.teamleader.eu/oauth2",
-            client_id=credentials.client_id,
-            client_secret=credentials.client_secret.get_secret_value(),
-            refresh_token=tokens["refresh_token"],
-            access_token=tokens["access_token"],
-        )
-        save_tokens_to_prefect(auth)
+        credentials.refresh_token = SecretStr(tokens["refresh_token"])
+        credentials.save(tl_cred_name, overwrite=True)
     except (ConnectionError, RuntimeError, ValueError) as e:
         return {"error": str(e)}
 
-    print("\n\nSuccess - fetched tokens from Teamleader and saved to prefect\n")
+    print("\n\nSuccess - fetched tokens from Teamleader and saved the refresh token to Prefect\n")
     os.kill(os.getpid(), signal.SIGTERM)
-    return {"message": "Success - fetched tokens from Teamleader and saved to prefect"}
+    return {"message": "Success - fetched tokens from Teamleader and saved the refresh token to Prefect"}
 
 
 if __name__ == "__main__":
