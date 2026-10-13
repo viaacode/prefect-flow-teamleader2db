@@ -3,22 +3,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field, field_serializer
-
-
-class HarvestTables:
-    """
-    The name of the tables in the ETL harvest database.
-    """
-
-    tl_companies = "tl_companies"
-    tl_contacts = "tl_contacts"
-    tl_custom_fields = "tl_custom_fields"
-    tl_departments = "tl_departments"
-    tl_events = "tl_events"
-    tl_invoices = "tl_invoices"
-    tl_oauth = "tl_oauth"
-    tl_projects = "tl_projects"
-    tl_users = "tl_users"
+from typing_extensions import TypedDict
 
 
 class Resource(Enum):
@@ -39,19 +24,39 @@ class Resource(Enum):
     @classmethod
     def get_db_table_name(cls, resource: "Resource") -> str:
         """
-        Maps the Teamleader resource on a database table name.
+        The default database table of the Teamleader resource.
         """
-        mapping = {
-            Resource.companies: HarvestTables.tl_companies,
-            Resource.contacts: HarvestTables.tl_contacts,
-            Resource.invoices: HarvestTables.tl_invoices,
-            Resource.departments: HarvestTables.tl_departments,
-            Resource.events: HarvestTables.tl_events,
-            Resource.projects: HarvestTables.tl_projects,
-            Resource.users: HarvestTables.tl_users,
-            Resource.customFieldDefinitions: HarvestTables.tl_custom_fields,
-        }
-        return mapping[resource]
+        return DEFAULT_TABLE_NAMES[resource.name]
+
+
+class ResourceTableNames(TypedDict):
+    """
+    The database table of each Teamleader resource. Keys must match the Resource names.
+
+    A TypedDict, because Prefect 2 shows it as a form in the UI and can validate it,
+    which it can't for pydantic models with pydantic v2 installed.
+    """
+
+    companies: str
+    contacts: str
+    invoices: str
+    departments: str
+    events: str
+    projects: str
+    users: str
+    customFieldDefinitions: str
+
+
+DEFAULT_TABLE_NAMES = ResourceTableNames(
+    companies="tl_companies",
+    contacts="tl_contacts",
+    invoices="tl_invoices",
+    departments="tl_departments",
+    events="tl_events",
+    projects="tl_projects",
+    users="tl_users",
+    customFieldDefinitions="tl_custom_fields",
+)
 
 
 class TeamleaderRequestInfo(BaseModel):

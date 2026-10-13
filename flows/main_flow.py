@@ -14,7 +14,9 @@ from .database import (
     upsert_into_table,
 )
 from .models import (
+    DEFAULT_TABLE_NAMES,
     Resource,
+    ResourceTableNames,
     TeamleaderRequestInfo,
     TeamleaderRequestList,
     TeamleaderResponseInfo,
@@ -124,13 +126,12 @@ def main_flow(
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
     resources: list[Resource] = list(Resource),
     full_sync: bool = False,
-    table_names: dict[Resource, str] = {},
+    table_names: ResourceTableNames = DEFAULT_TABLE_NAMES,
 ):
     """
     Sync all Teamleader resources (companies, users, contracts, etc.) to the etl_harvest database.
 
-    `table_names` overrides the database table of a resource, e.g. {"companies": "tmp_tl_companies"}.
-    Resources that are not in it use their default table.
+    `table_names` sets the database table of each resource, e.g. companies: tmp_tl_companies.
     """
     logger = get_run_logger()
     logger.info(f"Starting main flow with resources: {resources} and full_sync={full_sync}")
@@ -141,10 +142,7 @@ def main_flow(
         resource=resources,
         full_sync=unmapped(full_sync),
         db_block_name=unmapped(db_block_name),
-        table_name=[
-            table_names.get(resource, Resource.get_db_table_name(resource))
-            for resource in resources
-        ],
+        table_name=[table_names[resource.name] for resource in resources],
     )
     for future in futures:
         future.result()

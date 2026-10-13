@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from prefect.testing.utilities import prefect_test_harness
 
 from flows.main_flow import main_flow
-from flows.models import Resource
+from flows.models import DEFAULT_TABLE_NAMES, Resource, ResourceTableNames
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -93,7 +93,7 @@ def test_table_names_override_default_table(mocker):
     state = main_flow(
         db_block_name="etl-harvest",
         resources=[Resource.departments, Resource.users],
-        table_names={"departments": "tmp_tl_departments"},
+        table_names={**DEFAULT_TABLE_NAMES, "departments": "tmp_tl_departments"},
         return_state=True,
     )
 
@@ -102,3 +102,7 @@ def test_table_names_override_default_table(mocker):
     assert created == ["tmp_tl_departments", "tl_users"]
     upserted = {call.args[1] for call in mock_upsert.call_args_list}
     assert upserted == {"tmp_tl_departments", "tl_users"}
+
+
+def test_resource_table_names_has_a_field_per_resource():
+    assert set(ResourceTableNames.__annotations__) == {resource.name for resource in Resource}
