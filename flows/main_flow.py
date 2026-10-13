@@ -124,7 +124,7 @@ def main_flow(
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
     resources: list[Resource] = list(Resource),
     full_sync: bool = False,
-    table_names: Optional[dict[Resource, str]] = None,
+    table_names: dict[Resource, str] = {},
 ):
     """
     Sync all Teamleader resources (companies, users, contracts, etc.) to the etl_harvest database.
@@ -134,8 +134,6 @@ def main_flow(
     """
     logger = get_run_logger()
     logger.info(f"Starting main flow with resources: {resources} and full_sync={full_sync}")
-
-    table_names = table_names or {}
 
     futures = sync_teamleader_resource.map(
         tl_uri=unmapped(tl_api_uri),
