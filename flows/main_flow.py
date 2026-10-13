@@ -42,6 +42,7 @@ def sync_page(
     page: int,
     updated_since: Optional[datetime],
     conn: Connection,
+    table_name: str,
     session: TeamleaderSession,
 ) -> list[dict]:
     """
@@ -63,7 +64,7 @@ def sync_page(
         details.append(info)
 
     rows = format_data_as_db_row(details, resource)
-    upsert_into_table(conn, Resource.get_db_table_name(resource), rows)
+    upsert_into_table(conn, table_name, rows)
     return response_list.data
 
 
@@ -74,22 +75,22 @@ def sync_teamleader_resource(
     resource: Resource,
     full_sync: bool,
     db_block_name: str,
+    table_name: str,
 ):
     """
     Sync a Teamleader resource (e.g. companies, users, contacts, etc.) to the etl_harvest database.
     """
     logger = get_run_logger()
-    resource_table_name = Resource.get_db_table_name(resource)
-    logger.info(f"Starting sync of {resource} to {resource_table_name}")
+    logger.info(f"Starting sync of {resource} to {table_name}")
 
     conn = connect_database(db_block_name)
-    create_teamleader_resource_table(resource, conn)
+    create_teamleader_resource_table(table_name, conn)
 
     if full_sync:
-        truncate_table(conn, resource_table_name)
+        truncate_table(conn, table_name)
         db_last_modified = None
     else:
-        db_last_modified = get_last_modified_date(conn, resource_table_name)
+        db_last_modified = get_last_modified_date(conn, table_name)
 
     page = 1
     total = 0
@@ -101,6 +102,7 @@ def sync_teamleader_resource(
             page=page,
             updated_since=db_last_modified,
             conn=conn,
+            table_name=table_name,
             session=session,
         )
         if len(items) == 0 or items == prev_items:
@@ -109,7 +111,7 @@ def sync_teamleader_resource(
         page += 1
         total += len(items)
         prev_items = items
-        logger.info(f"Synced {total} {resource.name} items to {resource_table_name}")
+        logger.info(f"Synced {total} {resource.name} items to {table_name}")
 
     conn.close()
 
@@ -122,12 +124,18 @@ def main_flow(
     tl_auth_uri: str = "https://focus.teamleader.eu/oauth2",
     resources: list[Resource] = list(Resource),
     full_sync: bool = False,
+    table_names: Optional[dict[Resource, str]] = None,
 ):
     """
     Sync all Teamleader resources (companies, users, contracts, etc.) to the etl_harvest database.
+
+    `table_names` overrides the database table of a resource, e.g. {"companies": "tmp_tl_companies"}.
+    Resources that are not in it use their default table.
     """
     logger = get_run_logger()
     logger.info(f"Starting main flow with resources: {resources} and full_sync={full_sync}")
+
+    table_names = table_names or {}
 
     futures = sync_teamleader_resource.map(
         tl_uri=unmapped(tl_api_uri),
@@ -135,6 +143,10 @@ def main_flow(
         resource=resources,
         full_sync=unmapped(full_sync),
         db_block_name=unmapped(db_block_name),
+        table_name=[
+            table_names.get(resource, Resource.get_db_table_name(resource))
+            for resource in resources
+        ],
     )
     for future in futures:
         future.result()

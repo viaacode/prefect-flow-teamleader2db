@@ -131,3 +131,4 @@ def test_incremental_sync_picks_up_changed_items():
     assert name == "Renamed company"
     assert query("SELECT count(*) FROM tl_companies") == [(company_count,)]
 
+

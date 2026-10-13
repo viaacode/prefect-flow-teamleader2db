@@ -73,3 +73,32 @@ def test_failing_resource_fails_the_run(mocker):
     assert state.is_failed()
     requested = [call.args[0].resource for call in mock_req_list.call_args_list]
     assert Resource.users in requested
+
+
+def test_table_names_override_default_table(mocker):
+    mocker.patch("flows.main_flow.connect_database")
+    mock_create_table = mocker.patch("flows.main_flow.create_teamleader_resource_table")
+    mocker.patch("flows.main_flow.get_last_modified_date", return_value=None)
+    mock_upsert = mocker.patch("flows.main_flow.upsert_into_table")
+
+    page = MagicMock()
+    page.data = [{"id": "item_1"}]
+    empty_page = MagicMock()
+    empty_page.data = []
+    mocker.patch("flows.main_flow.request_teamleader_list", side_effect=[page, empty_page, page, empty_page])
+    info = MagicMock()
+    info.data = {"id": "item_1"}
+    mocker.patch("flows.main_flow.request_teamleader_info", return_value=info)
+
+    state = main_flow(
+        db_block_name="etl-harvest",
+        resources=[Resource.departments, Resource.users],
+        table_names={"departments": "tmp_tl_departments"},
+        return_state=True,
+    )
+
+    assert state.is_completed(), state.message
+    created = [call.args[0] for call in mock_create_table.call_args_list]
+    assert created == ["tmp_tl_departments", "tl_users"]
+    upserted = {call.args[1] for call in mock_upsert.call_args_list}
+    assert upserted == {"tmp_tl_departments", "tl_users"}
