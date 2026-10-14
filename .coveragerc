@@ -1,2 +1,0 @@
-[run]
-omit = python_env/*, tests/**, main.py, models_console.py, wsgi.py, debug.py

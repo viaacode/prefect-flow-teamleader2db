@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: etl
+      POSTGRES_PASSWORD: etl
+      POSTGRES_DB: etl_harvest
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "etl", "-d", "etl_harvest"]
+      interval: 2s
+      retries: 15
+
+  teamleader:
+    build: mock_teamleader
+    ports:
+      - "18080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/_admin/health')"]
+      interval: 2s
+      retries: 15
