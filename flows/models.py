@@ -32,9 +32,6 @@ class Resource(Enum):
 class ResourceTableNames(TypedDict):
     """
     The database table of each Teamleader resource. Keys must match the Resource names.
-
-    A TypedDict, because Prefect 2 shows it as a form in the UI and can validate it,
-    which it can't for pydantic models with pydantic v2 installed.
     """
 
     companies: str

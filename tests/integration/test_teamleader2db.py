@@ -97,10 +97,6 @@ def test_new_refresh_token_is_saved():
 
 
 def test_access_token_expiring_mid_run_is_refreshed(monkeypatch):
-    # Each access token now only works for 5 requests, so the resource tasks keep
-    # running into an expired token. A refresh token can only be used once, so two
-    # tasks refreshing at the same time would make one of them fail.
-    # Retries are off, because a retry would hide that failure.
     monkeypatch.setattr(sync_teamleader_resource, "retries", 0)
     requests.post(f"{MOCK_URL}/_admin/settings", json={"access_token_max_uses": 5})
     try:

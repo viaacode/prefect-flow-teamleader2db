@@ -28,10 +28,7 @@ class TeamleaderRequestException(Exception):
 class TeamleaderSession:
     """
     Keeps the Teamleader access token in memory and shares it between the resource tasks.
-
-    Only the refresh token is stored, in the TeamleaderCredentials block. Teamleader replaces
-    the refresh token on every refresh, so the resource tasks must not run in parallel
-    or they could refresh with the same refresh token at the same time.
+    The refresh token is stored in the TeamleaderCredentials block.
 
     https://developer.teamleader.eu/#/introduction/authentication
     """

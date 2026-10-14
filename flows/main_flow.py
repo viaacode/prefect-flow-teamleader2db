@@ -118,7 +118,6 @@ def sync_teamleader_resource(
     conn.close()
 
 
-# Sequential: the resource tasks share one Teamleader refresh token, which can only be used once.
 @flow(name="prefect_flow_teamleader2db", task_runner=SequentialTaskRunner())
 def main_flow(
     db_block_name: str,
