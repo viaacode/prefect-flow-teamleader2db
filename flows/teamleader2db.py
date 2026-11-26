@@ -189,7 +189,7 @@ async def add_flow_run_tag(tag: str):
 
 
 @flow(name="prefect_flow_teamleader2db", task_runner=SequentialTaskRunner())
-def main_flow(
+def teamleader2db_flow(
     database_config: DatabaseConfig,
     teamleader_config: TeamleaderConfig,
     full_sync: bool = False,

@@ -13,10 +13,10 @@ from prefect.testing.utilities import prefect_test_harness
 from prefect_sqlalchemy import DatabaseCredentials
 
 from flows.blocks.teamleader import TeamleaderCredentials
-from flows.main_flow import (
+from flows.teamleader2db import (
     DatabaseConfig,
     TeamleaderConfig,
-    main_flow,
+    teamleader2db_flow,
     sync_teamleader_resource,
 )
 from flows.utils.last_modified import ScopedLastModified
@@ -57,7 +57,7 @@ def prefect_blocks():
 
 
 def run_flow(full_sync: bool, last_modified_scoped=None):
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(
             api_uri=MOCK_URL,

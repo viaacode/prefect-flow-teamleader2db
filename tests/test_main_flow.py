@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from prefect.testing.utilities import prefect_test_harness
 
-from flows.main_flow import DatabaseConfig, TeamleaderConfig, main_flow
+from flows.teamleader2db import DatabaseConfig, TeamleaderConfig, teamleader2db_flow
 from flows.utils.last_modified import ScopedLastModified
 from flows.utils.models import DEFAULT_TABLE_NAMES, Resource, ResourceTableNames
 
@@ -43,7 +43,7 @@ def test_main_flow_orchestration(mocker):
     mock_req_info = mocker.patch("flows.main_flow.request_teamleader_info")
     mock_req_info.return_value = mock_info
 
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(resources=[Resource.departments]),
         full_sync=False,
@@ -75,7 +75,7 @@ def test_failing_resource_fails_the_run(mocker):
 
     mock_req_list = mocker.patch("flows.main_flow.request_teamleader_list", side_effect=fake_list)
 
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(resources=[Resource.departments, Resource.users]),
         full_sync_day=not_today(),
@@ -103,7 +103,7 @@ def test_table_names_override_default_table(mocker):
 
     table_names = dict(DEFAULT_TABLE_NAMES)
     table_names["departments"] = "tmp_tl_departments"
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest", table_names=table_names),
         teamleader_config=TeamleaderConfig(resources=[Resource.departments, Resource.users]),
         full_sync_day=not_today(),
@@ -126,7 +126,7 @@ def run_departments_sync(mocker, full_sync_day: int):
     empty_page.data = []
     mocker.patch("flows.main_flow.request_teamleader_list", return_value=empty_page)
 
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(resources=[Resource.departments]),
         full_sync_day=full_sync_day,
@@ -163,7 +163,7 @@ def test_incremental_sync_uses_and_saves_last_modified(mocker, mock_save_last_mo
     mocker.patch("flows.main_flow.request_teamleader_info", side_effect=[info_1, info_2])
 
     last_synced = datetime(2024, 4, 1, tzinfo=timezone.utc)
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(resources=[Resource.companies]),
         full_sync_day=not_today(),
@@ -190,7 +190,7 @@ def test_full_sync_ignores_last_modified(mocker):
     empty_page.data = []
     mock_req_list = mocker.patch("flows.main_flow.request_teamleader_list", return_value=empty_page)
 
-    state = main_flow(
+    state = teamleader2db_flow(
         database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
         teamleader_config=TeamleaderConfig(resources=[Resource.companies]),
         full_sync=True,
