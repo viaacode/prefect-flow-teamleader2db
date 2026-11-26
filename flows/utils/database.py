@@ -1,5 +1,3 @@
-from datetime import datetime
-
 import psycopg2.extensions
 from prefect import get_run_logger
 from prefect_sqlalchemy import DatabaseCredentials
@@ -75,16 +73,4 @@ def connect_database(db_block_name: str) -> Connection:
         port=postgres_credentials.port,
         database=postgres_credentials.database,
     )
-
-
-def get_last_modified_date(conn: Connection, table_name: str) -> datetime:
-    get_run_logger().info(f"Fetching last modified date from table: {table_name}")
-    with conn, conn.cursor() as curs:
-        curs.execute(
-            sql.SQL("SELECT max(updated_at) FROM {}").format(sql.Identifier(table_name))
-        )
-        result_list = curs.fetchone()
-        if result_list is None:
-            raise ValueError("Could not fetch last updated date")
-        return result_list[0]
 

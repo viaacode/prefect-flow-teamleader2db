@@ -2,7 +2,11 @@ import pytest
 import responses
 from fastapi.testclient import TestClient
 
-from flows.authorization import app, get_access_token_from_teamleader, global_state
+from flows.utils.authorization import (
+    app,
+    get_access_token_from_teamleader,
+    global_state,
+)
 
 client = TestClient(app)
 
@@ -12,7 +16,7 @@ client = TestClient(app)
 
 @responses.activate 
 def test_get_access_token_success(mocker):
-    mock_creds = mocker.patch("flows.authorization.TeamleaderCredentials.load")
+    mock_creds = mocker.patch("flows.utils.authorization.TeamleaderCredentials.load")
     mock_creds.return_value.client_id = "fake_client_id"
     mock_creds.return_value.client_secret.get_secret_value.return_value = "fake_client_secret"
 
@@ -30,7 +34,7 @@ def test_get_access_token_success(mocker):
 
 @responses.activate
 def test_get_access_token_fails_on_error(mocker):
-    mocker.patch("flows.authorization.TeamleaderCredentials.load")
+    mocker.patch("flows.utils.authorization.TeamleaderCredentials.load")
 
     responses.add(
         responses.POST,
@@ -72,11 +76,11 @@ def test_oauth_endpoint_success_flow(mocker):
     global_state["state"] = "geldige_state_123"
     
     mocker.patch(
-        "flows.authorization.get_access_token_from_teamleader",
+        "flows.utils.authorization.get_access_token_from_teamleader",
         return_value={"access_token": "nieuw_access", "refresh_token": "nieuw_refresh"}
     )
     
-    mock_creds = mocker.patch("flows.authorization.TeamleaderCredentials.load")
+    mock_creds = mocker.patch("flows.utils.authorization.TeamleaderCredentials.load")
     mock_creds.return_value.client_id = "fake_id"
     mock_creds.return_value.client_secret.get_secret_value.return_value = "fake_secret"
     

@@ -1,3 +1,4 @@
 psycopg2-binary==2.9.5
 requests==2.31.0
 prefect-sqlalchemy==0.4.3
+pydantic==1.10.8

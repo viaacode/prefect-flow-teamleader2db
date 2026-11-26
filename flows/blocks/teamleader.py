@@ -1,5 +1,5 @@
 from prefect.blocks.core import Block
-from pydantic.v1 import Field, SecretStr
+from pydantic import Field, SecretStr
 
 
 class TeamleaderCredentials(Block): # type: ignore

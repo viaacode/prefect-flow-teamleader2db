@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 
@@ -77,18 +77,9 @@ class TeamleaderRequestList(BaseModel):
 
     base_uri: str = Field(default="https://api.focus.teamleader.eu")
     resource: Resource
-    page: int = Field(default=1, serialization_alias="page[number]")
-    page_size: int = Field(default=20, serialization_alias="page[size]")
-    updated_since: Optional[datetime] = Field(
-        default=None,
-        serialization_alias="filter[updated_since]",
-    )
-
-    # needs to be isormat without microsecond ex: '2021-03-29T16:44:33+00:00'
-    @field_serializer("updated_since")
-    def serialize_updated_since(self, updated_since: datetime, _info):
-        _ = _info
-        return updated_since.replace(microsecond=0).isoformat()
+    page: int = Field(default=1)
+    page_size: int = Field(default=20)
+    updated_since: Optional[datetime] = Field(default=None)
 
     @property
     def path(self):
@@ -121,11 +112,14 @@ def serialize(req) -> dict[str, Any]:
     Convert the Pydantic request models into a Python dictionary.
     """
     if type(req) is TeamleaderRequestList:
-        return req.model_dump(
-            exclude_none=True,
-            by_alias=True,
-            include={"page", "page_size", "updated_since"},
-        )
+        data: dict[str, Any] = {
+            "page[number]": req.page,
+            "page[size]": req.page_size,
+        }
+        # Teamleader expects isoformat without microseconds, e.g. '2021-03-29T16:44:33+00:00'
+        if req.updated_since is not None:
+            data["filter[updated_since]"] = req.updated_since.replace(microsecond=0).isoformat()
+        return data
     elif type(req) is TeamleaderRequestInfo:
         return {"id": req.id}
     else:

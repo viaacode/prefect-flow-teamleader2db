@@ -8,7 +8,7 @@ from typing import Optional
 
 import requests
 from fastapi import FastAPI
-from pydantic.v1 import SecretStr
+from pydantic import SecretStr
 from requests import PreparedRequest
 
 from flows.blocks.teamleader import TeamleaderCredentials

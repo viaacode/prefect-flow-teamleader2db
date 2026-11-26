@@ -4,6 +4,7 @@ Start it with .dev/run.sh, which brings up the Docker containers first.
 """
 
 import os
+from datetime import datetime
 
 import psycopg2
 import pytest
@@ -12,8 +13,14 @@ from prefect.testing.utilities import prefect_test_harness
 from prefect_sqlalchemy import DatabaseCredentials
 
 from flows.blocks.teamleader import TeamleaderCredentials
-from flows.main_flow import main_flow, sync_teamleader_resource
-from flows.models import Resource
+from flows.main_flow import (
+    DatabaseConfig,
+    TeamleaderConfig,
+    main_flow,
+    sync_teamleader_resource,
+)
+from flows.utils.last_modified import ScopedLastModified
+from flows.utils.models import Resource
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("DEV_STACK"), reason="needs the Docker stack from .dev/run.sh"
@@ -49,13 +56,17 @@ def prefect_blocks():
         yield
 
 
-def run_flow(full_sync: bool):
+def run_flow(full_sync: bool, last_modified_scoped=None):
     state = main_flow(
-        db_block_name="etl-harvest",
-        tl_api_uri=MOCK_URL,
-        tl_auth_uri=f"{MOCK_URL}/oauth2",
-        resources=RESOURCES,
+        database_config=DatabaseConfig(credentials_block_name="etl-harvest"),
+        teamleader_config=TeamleaderConfig(
+            api_uri=MOCK_URL,
+            auth_uri=f"{MOCK_URL}/oauth2",
+            resources=RESOURCES,
+        ),
         full_sync=full_sync,
+        full_sync_day=datetime.now().day % 28 + 1,
+        last_modified_scoped=last_modified_scoped,
         return_state=True,
     )
     assert state.is_completed(), state.message
@@ -115,11 +126,15 @@ def test_incremental_sync_picks_up_changed_items():
     run_flow(full_sync=True)
     [(company_id,)] = query("SELECT tl_uuid::text FROM tl_companies ORDER BY tl_uuid LIMIT 1")
     [(company_count,)] = query("SELECT count(*) FROM tl_companies")
+    [(last_modified,)] = query("SELECT max((tl_content->>'updated_at')::timestamptz) FROM tl_companies")
 
     requests.post(
         f"{MOCK_URL}/_admin/companies/{company_id}", json={"name": "Renamed company"}
     ).raise_for_status()
-    run_flow(full_sync=False)
+    run_flow(
+        full_sync=False,
+        last_modified_scoped=[ScopedLastModified(scope="companies", last_modified=last_modified)],
+    )
 
     [(name,)] = query(
         "SELECT tl_content->>'name' FROM tl_companies WHERE tl_uuid = %s", (company_id,)

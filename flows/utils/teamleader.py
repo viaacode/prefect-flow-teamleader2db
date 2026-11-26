@@ -4,7 +4,7 @@ from typing import Any, Optional, Union
 
 import requests
 from prefect import get_run_logger
-from pydantic.v1 import SecretStr
+from pydantic import SecretStr
 from requests import Response
 
 from flows.blocks.teamleader import TeamleaderCredentials

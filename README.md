@@ -5,15 +5,12 @@ This [Prefect](https://www.prefect.io/) flow performs a one-way synchronization 
 ## Usage
 Start a new flow run or configure a deployment to run periodically on the Prefect server.
 
-Alternatively, install the requirements
-```sh
-pip install -r requirements-dev.txt
-```
-
-And start a run locally
-```sh
-python flows/main_flow.py
-```
+Parameters:
+- `database_config`: database credentials block and the table of each Teamleader resource.
+- `teamleader_config`: Teamleader credentials block, API URIs and the resources to sync.
+- `full_sync`: empty the tables and sync everything instead of only the items updated since the last run.
+- `full_sync_day`: day of the month on which a full sync runs automatically (default `1`).
+- `last_modified_scoped`: per resource, the most recent `updated_at` of the synced items. The flow saves it in the deployment after each resource, and the next run only fetches items updated since then. A full sync clears it.
 
 ## Authorization
 
@@ -56,7 +53,7 @@ POSTGRES_PASSWORD
 Start the local server
 
 ```
-python flows/authorization.py
+python -m flows.utils.authorization
 ```
 This will redirect you to the Teamleader authorization page and save the newly generated refresh token to the `teamleader-credentials` Prefect block.
 If you receive an error while authorizing, stop the server from your terminal with `Ctrl+C` and restart it with the above command.
